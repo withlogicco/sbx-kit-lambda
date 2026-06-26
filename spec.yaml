@@ -1,0 +1,167 @@
+schemaVersion: "1"
+kind: sandbox
+name: lambda
+displayName: Lambda
+description: "Pi coding agent repackaged as Lambda with OpenAI Codex OAuth and OpenCode Go support"
+
+sandbox:
+  image: "docker/sandbox-templates:shell-docker"
+  aiFilename: AGENTS.md
+  entrypoint:
+    run: [lambda]
+
+caps:
+  network:
+    allow:
+      - pi.dev
+      - registry.npmjs.org
+      - opencode.ai
+      - chatgpt.com
+
+credentials:
+  sources:
+    openai:
+      env:
+        - OPENAI_API_KEY
+      file:
+        path: "~/.codex/auth.json"
+        parser: "json:OPENAI_API_KEY"
+    opencode-go:
+      apiKey:
+        name: OPENCODE_API_KEY
+        inject:
+          - domain: opencode.ai
+            header: Authorization
+            format: "Bearer %s"
+
+environment:
+  variables:
+    BROWSER: xdg-open
+    CODEX_HOME: /home/agent/.codex
+    SBX_CRED_OPENAI_MODE: oauth
+  proxyManaged:
+    - OPENCODE_API_KEY
+
+commands:
+  install:
+    - command: "npm config set proxy $HTTP_PROXY && npm config set https-proxy $HTTP_PROXY"
+      user: "1000"
+      description: "Configure npm proxy for the pi.dev installer"
+    - command: 'i=0; while [ $i -lt 5 ]; do if curl -fsSL https://pi.dev/install.sh -o /tmp/pi-install.sh && sh /tmp/pi-install.sh; then break; fi; i=$((i+1)); echo "Retrying ($i/5)..."; sleep 2; done; [ $i -lt 5 ]'
+      user: "1000"
+      description: "Install Pi coding agent with the pi.dev installer (with retries)"
+    - command: "printf '#!/bin/sh\nexec pi \"$@\"\n' > /usr/local/bin/lambda && chmod +x /usr/local/bin/lambda"
+      user: "0"
+      description: "Create lambda shim that delegates to the Pi CLI"
+    - command: |
+        cat > /usr/local/bin/lambda-setup-openai-codex-oauth <<'SH'
+        #!/bin/sh
+        set -eu
+
+        if [ "${SBX_CRED_OPENAI_MODE:-}" != "oauth" ]; then
+          exit 0
+        fi
+
+        PI_AGENT_HOME="${PI_AGENT_HOME:-$HOME/.pi/agent}"
+        export PI_AGENT_HOME
+        mkdir -p "$PI_AGENT_HOME"
+        chmod 700 "$PI_AGENT_HOME" 2>/dev/null || true
+
+        python3 - <<'PY'
+        import base64
+        import json
+        import os
+        import time
+        import uuid
+        from pathlib import Path
+
+        agent_home = Path(os.environ["PI_AGENT_HOME"]).expanduser()
+        auth_path = agent_home / "auth.json"
+
+        try:
+            auth = json.loads(auth_path.read_text())
+        except FileNotFoundError:
+            auth = {}
+        except json.JSONDecodeError:
+            auth = {}
+
+        existing = auth.get("openai-codex")
+        if isinstance(existing, dict) and existing.get("type") == "oauth":
+            # Preserve a real Pi login if the user has one.
+            raise SystemExit(0)
+
+        account_id = str(uuid.uuid4())
+
+        def b64url(payload):
+            raw = json.dumps(payload, separators=(",", ":")).encode()
+            return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+        access = ".".join(
+            [
+                b64url({"alg": "none", "typ": "JWT"}),
+                b64url(
+                    {
+                        "https://api.openai.com/auth": {
+                            "chatgpt_account_id": account_id,
+                        },
+                        "exp": int(time.time()) + 31536000,
+                    }
+                ),
+                "fake",
+            ]
+        )
+
+        auth["openai-codex"] = {
+            "type": "oauth",
+            "access": access,
+            "refresh": "proxy-managed",
+            "expires": int(time.time() * 1000) + 31536000_000,
+            "accountId": account_id,
+        }
+
+        tmp_path = auth_path.with_suffix(".json.tmp")
+        tmp_path.write_text(json.dumps(auth, indent=2) + "\n")
+        os.chmod(tmp_path, 0o600)
+        tmp_path.replace(auth_path)
+        PY
+        SH
+        chmod +x /usr/local/bin/lambda-setup-openai-codex-oauth
+      user: "0"
+      description: "Install startup helper that configures Pi openai-codex auth for the sandbox OpenAI OAuth proxy"
+  startup:
+    - command: ["/usr/local/bin/lambda-setup-openai-codex-oauth"]
+      user: "1000"
+      description: "Create Pi openai-codex OAuth placeholder auth when sbx OpenAI OAuth is available"
+
+oauth:
+  service: openai
+  tokenEndpoint:
+    host: auth.openai.com
+    path: /oauth/token
+  sentinels:
+    accessToken: oai-oat01-proxy-managed
+    refreshToken: oai-ort01-proxy-managed
+  skipIfEnv:
+    - OPENAI_API_KEY
+
+agentContext: |
+  ## Lambda sandbox environment
+
+  You are Lambda, an agent powered by Pi, running inside this Docker sandbox.
+
+  Run all development commands locally within this sandbox. Do not ask the user
+  to run project commands on the host.
+
+  When a backing service is needed, such as PostgreSQL or Redis, run that
+  service inside Docker from this sandbox and expose/publish its ports locally
+  to the sandbox. Application code, tests, migrations, linters, package
+  managers, and other project commands should still run directly in this
+  sandbox, connecting to those Dockerized services through their locally
+  exposed ports.
+
+  Pi is available through the `lambda` shim. When `SBX_CRED_OPENAI_MODE=oauth`,
+  startup creates Pi `openai-codex` placeholder auth so ChatGPT/Codex
+  subscription requests can go through the sbx OpenAI OAuth proxy without
+  storing the real OAuth token in the sandbox. Use provider `openai-codex` for
+  that flow, or Pi's built-in OpenCode Go provider with `OPENCODE_API_KEY` /
+  provider `opencode-go` when requested.
