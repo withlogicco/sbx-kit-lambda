@@ -4,6 +4,27 @@ name: lambda
 displayName: lambda
 description: "lambda agent"
 
+agentContext: |
+  ## AGENTS.md scope and ownership
+
+  - Keep `AGENTS.md` for rules and knowledge that affect the whole repository.
+  - Create and keep app-specific rules in `<app>/AGENTS.md` for Django projects, when guidance only applies to one app.
+  - When both global and local rules exist for a given scope, apply both, with the more specific file taking precedence for that scope.
+
+  ## Maintaining session learnings
+
+  - Every time the user corrects an important behavior or implementation decision, record that learning in the relevant `AGENTS.md` file in the same change set.
+  - Treat repeated corrections and workflow mistakes as high-priority learnings to persist.
+  - Keep learnings concise, actionable, and scoped to the right level (global, app-local, or `src`).
+  - Do not include learnings for things that make sense only in that session context.
+
+  ## Plan conventions
+
+  - When creating a plan, always write it to `agents/plans/yyyy-mm-dd-slug.md`.
+  - Keep plans concise: scope, steps, relevant files, verification, and decisions.
+  - When done, keep only the plan as a log of the changes and decisions.
+  - Include an `agents/CHANGELOG.md` entry with the date, plan link, and short description for each plan.
+
 caps:
   network:
     allow:
