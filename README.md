@@ -1,67 +1,76 @@
-# Lambda agent kit
+# lambda Pi Kit
 
-Lambda is a Docker Sandbox agent kit based on the upstream Pi contrib kit. It
-installs Pi with the `pi.dev` installer, exposes it as `lambda`, and includes
-OpenAI Codex OAuth and OpenCode Go sandbox wiring.
-
-## What it configures
-
-- Agent kit metadata and entrypoint are named `lambda`.
-- Installs Pi via `curl -fsSL https://pi.dev/install.sh | sh` logic.
-- Adds a `/usr/local/bin/lambda` shim that delegates to the `pi` CLI.
-- Exposes `OPENCODE_API_KEY` as a proxy-managed variable.
-- Sets Codex-compatible environment variables (`BROWSER`, `CODEX_HOME`) and declares the OpenAI credential discovery sources sbx expects for Codex OAuth mode.
-- Requests sbx OpenAI OAuth wiring so ChatGPT/Codex subscription auth is available when the host has `sbx secret set -g openai --oauth`.
-- Creates Pi `openai-codex` placeholder OAuth auth on startup when `SBX_CRED_OPENAI_MODE=oauth`, allowing Pi to send Codex requests through the sbx proxy without storing the real OAuth token in the sandbox.
-- Allows OpenAI Codex/ChatGPT traffic to `chatgpt.com` for the sbx OAuth proxy path.
-- Allows and authenticates OpenCode Go traffic to `opencode.ai`.
-- Allows `pi.dev` for the installer/update checks and `registry.npmjs.org` for
-  npm package downloads used by the Pi installer.
-- Adds agent memory instructing Lambda to run development commands locally in
-  the sandbox, while running backing services such as PostgreSQL and Redis in
-  Docker with ports exposed locally.
-
-## Host-side setup
-
-Store provider keys on the host as sandbox secrets:
+This kit installs Pi behind the `codex` command inside Docker SBX's built-in
+`codex` agent.
+Using the built-in identity is intentional: SBX 0.35 associates the stored
+OpenAI OAuth credential with the `codex` agent name. The launch command is
+therefore:
 
 ```bash
-# ChatGPT Plus/Pro Codex subscription via sbx OAuth proxy
-sbx secret set -g openai --oauth
+sbx run --kit git+https://github.com/withlogicco/sbx-kit-lambda codex
+```
 
+The default `codex` command launches the lambda agent. The original SBX Codex CLI remains
+available as `sbx-codex`:
+
+```bash
+codex
+sbx-codex
+```
+
+Pi starts on `openai-codex/gpt-5.6-terra` with high thinking. Its model picker
+is scoped to all Codex models and OpenCode Go models.
+
+## Setup
+
+Store OpenCode Go API key:
+
+```bash
 sbx secret set -g opencode-go
 ```
 
-For OpenCode Go, you can also provide the key from your host shell for one-off runs:
+Authenticate with OpenAI:
 
 ```bash
-export OPENCODE_API_KEY=...
+sbx secret set -g openai --oauth
 ```
 
-## Usage
+SBX retains the credential on the host and does not expose its value in the
+sandbox.
 
-Kit install/startup changes are applied when the sandbox is created. If you
-already have a `lambda-*` sandbox, remove it before testing kit changes:
+## Run
 
-```bash
-sbx rm -f lambda-jobcard
+Add this function to `~/.zshrc` to create or resume a sandbox named
+`lambda-<current-directory>`:
+
+```zsh
+lambda() {
+  local name="lambda-${PWD:t}"
+  local kit="git+https://github.com/withlogicco/sbx-kit-lambda"
+
+  if sbx ls --quiet | grep -Fxq -- "$name"; then
+    sbx run --name "$name"
+  else
+    sbx run --kit "$kit" --name "$name" codex
+  fi
+}
 ```
 
-Then create/run it again:
+Reload your Zsh configuration with `source ~/.zshrc`, then run `lambda` from
+the project directory.
 
 ```bash
-sbx run --kit ./docker-sandbox/lambda lambda
+sbx run --kit git+https://github.com/withlogicco/sbx-kit-lambda codex
 ```
 
-Inside the sandbox, start the agent with:
+Run lambda after the sandbox is created:
 
 ```bash
-lambda
+sbx run --kit git+https://github.com/withlogicco/sbx-kit-lambda --name <sandbox-name> codex
 ```
 
-The shim delegates to Pi, so Pi CLI options still work:
+Validate the kit with:
 
 ```bash
-lambda --provider openai-codex --model gpt-5.4-mini
-lambda --provider opencode-go
+sbx kit validate .
 ```
