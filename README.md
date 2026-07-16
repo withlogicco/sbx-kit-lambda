@@ -10,13 +10,33 @@ therefore:
 sbx run --kit git+https://github.com/withlogicco/sbx-kit-lambda codex
 ```
 
-The default `codex` command launches the lambda agent. The original SBX Codex CLI remains
-available as `sbx-codex`:
+The default `codex` command launches the lambda agent. Native agent CLIs remain
+available under `sbx-*` names:
 
 ```bash
-codex
-sbx-codex
+codex       # lambda (Pi)
+sbx-codex   # native Codex CLI
+claude      # native Claude Code CLI
+sbx-claude  # native Claude Code CLI, used by lambda subagents
 ```
+
+Pi includes native-agent subcommands and can also delegate to them itself:
+
+```text
+/codex plan map the authentication flow
+/claude review review the current working tree
+/codex code implement the approved plan
+```
+
+`plan` and `review` runs are read-only and can run concurrently. `code` runs
+modify the shared workspace and are serialized. Native agents run with their
+permission-bypass options because SBX provides the isolation boundary.
+
+Plan and review use `gpt-5.6-sol` (Codex) and `fable` (Claude). Coding defaults
+to `gpt-5.6-terra` (Codex) and `opus` (Claude); use `sonnet` by setting
+`LAMBDA_CLAUDE_CODE_MODEL=sonnet`. Any role can be overridden with
+`LAMBDA_<BACKEND>_<ROLE>_MODEL`. Pi's `run_subagent` tool also accepts an
+optional `model` argument; without one it uses these same role defaults.
 
 Pi starts on `openai-codex/gpt-5.6-terra` with high thinking. Its model picker
 is scoped to all Codex models and OpenCode Go models.
@@ -37,6 +57,16 @@ sbx secret set -g openai --oauth
 
 SBX retains the credential on the host and does not expose its value in the
 sandbox.
+
+Claude Code authentication must be started **inside the sandbox**; Anthropic
+OAuth cannot be created with `sbx secret set`. After the sandbox starts, run:
+
+```bash
+sbx-claude auth login
+```
+
+If a Claude subagent cannot authenticate, lambda prints this command in its
+result. Recreating a sandbox may require signing in again.
 
 ## Run
 
