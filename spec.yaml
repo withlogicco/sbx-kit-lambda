@@ -18,6 +18,12 @@ agentContext: |
   - Keep learnings concise, actionable, and scoped to the right level (global, app-local, or `src`).
   - Do not include learnings for things that make sense only in that session context.
 
+  ## Testing with Docker Compose
+
+  - When a Docker Compose configuration is present, boot its dependent services with the local Docker daemon (for example, `docker compose up -d`) and ensure their published ports are available on `localhost`.
+  - Run the web app's tests from the workspace, not from a Compose container. The web app's test command must supply the environment variables it needs to connect to those services through `localhost`.
+  - Use the .github/workflows files to understand what tests need to be run and how
+
   ## Plan conventions
 
   - When creating a plan, always write it to `agents/plans/yyyy-mm-dd-slug.md`.

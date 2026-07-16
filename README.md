@@ -48,6 +48,10 @@ lambda() {
   local name="lambda-${PWD:t}"
   local kit="git+https://github.com/withlogicco/sbx-kit-lambda"
 
+  if [[ "${1:-}" == "--reset" ]] && sbx ls --quiet | grep -Fxq -- "$name"; then
+    sbx rm --force "$name"
+  fi
+
   if sbx ls --quiet | grep -Fxq -- "$name"; then
     sbx run --name "$name"
   else
@@ -57,7 +61,8 @@ lambda() {
 ```
 
 Reload your Zsh configuration with `source ~/.zshrc`, then run `lambda` from
-the project directory.
+the project directory. To remove the directory's existing sandbox and create a
+fresh one, run `lambda --reset`.
 
 ```bash
 sbx run --kit git+https://github.com/withlogicco/sbx-kit-lambda codex
