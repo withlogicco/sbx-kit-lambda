@@ -41,6 +41,10 @@ caps:
       - raw.githubusercontent.com
       - release-assets.githubusercontent.com
       - chatgpt.com
+      - api.anthropic.com
+      - claude.ai
+      - console.anthropic.com
+      - platform.claude.com
 
 credentials:
   - service: opencode-go
@@ -61,6 +65,42 @@ commands:
     - command: 'i=0; while [ $i -lt 5 ]; do if curl -fsSL https://pi.dev/install.sh -o /tmp/pi-install.sh && sh /tmp/pi-install.sh; then break; fi; i=$((i+1)); echo "Retrying ($i/5)..."; sleep 2; done; [ $i -lt 5 ]'
       user: "1000"
       description: "Install Pi coding agent with the pi.dev installer"
+    - command: |
+        set -eu
+        version="0.30.0"
+        case "$(uname -m)" in
+          x86_64|amd64)
+            asset="jj-v${version}-x86_64-unknown-linux-musl.tar.gz"
+            sha256="5540b5438d71867ccde3339d041e57eecf60edf8b4ecc3dfcce2af106e08f70b"
+            ;;
+          aarch64|arm64)
+            asset="jj-v${version}-aarch64-unknown-linux-musl.tar.gz"
+            sha256="36001ee38b14d0241e8c061f3147e4c52754b02cc32c4e3f09ebf641cb28f6b9"
+            ;;
+          *) echo "Unsupported jj architecture: $(uname -m)" >&2; exit 1 ;;
+        esac
+        archive="/tmp/${asset}"
+        curl -fsSL --retry 4 "https://github.com/jj-vcs/jj/releases/download/v${version}/${asset}" -o "$archive"
+        echo "${sha256}  ${archive}" | sha256sum -c -
+        install_dir="$(mktemp -d)"
+        tar -xzf "$archive" -C "$install_dir"
+        install -m 0755 "$(find "$install_dir" -type f -name jj -print -quit)" /usr/local/bin/jj.new
+        mv /usr/local/bin/jj.new /usr/local/bin/jj
+        jj --version
+        rm -rf "$install_dir" "$archive"
+      user: "0"
+      description: "Install pinned Jujutsu for private Lambda turn history"
+    - command: "npm install -g @anthropic-ai/claude-code"
+      user: "0"
+      description: "Install the native Claude Code CLI"
+    - command: |
+        cat > /usr/local/share/npm-global/bin/sbx-claude <<'SH'
+        #!/bin/sh
+        exec claude "$@"
+        SH
+        chmod +x /usr/local/share/npm-global/bin/sbx-claude
+      user: "0"
+      description: "Preserve native Claude Code as sbx-claude"
     - command: |
         mv /usr/local/share/npm-global/bin/codex /usr/local/share/npm-global/bin/sbx-codex
         cat > /usr/local/share/npm-global/bin/codex <<'SH'
