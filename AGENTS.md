@@ -22,6 +22,21 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
   Claude Code are the documented exceptions.
 - `npm install -g` runs as the agent user (UID 1000): the base image ships an
   agent-owned `/usr/local/share/npm-global` that is already on `PATH`.
+- Tool installation belongs in `files/home/.lambda/install-tools.sh` and
+  nowhere else. Both the `Dockerfile` and `setup.install` run that script, so
+  never duplicate an install step into either one. Keep every step guarded and
+  idempotent: `setup.install` runs it on every sandbox creation, and it must
+  no-op against a prebuilt image.
+- Beyond that script, `setup.install` is for runtime-dependent work only:
+  volume-mount ownership, npm proxy configuration, and config seeding that reads
+  `WORKSPACE_DIR` or `HTTP_PROXY`.
+- `sandbox.build` is declared for discoverability but sbx does not act on it.
+  Expect one notice on every `sbx kit validate` / `sbx kit inspect` saying the
+  image is taken from `sandbox.image`; that is not a regression. Declaring
+  `build` without `image` fails validation outright, so `image` must always be
+  set. The image is built by `.github/workflows/image.yml`, or locally with
+  `docker build -t ghcr.io/withlogicco/sbx-kit-lambda:latest .` until CI
+  publishes the tag.
 - Native subagents must be invoked as `codex` and `claude`. Never shell out to
   `lambda` or `pi` from the subagent extension.
 - Never start a native subagent proactively. The current user must clearly ask

@@ -139,6 +139,14 @@ current directory:
 lambda() {
   local name="lambda-${PWD:t}"
   local kit="git+https://github.com/withlogicco/sbx-kit-lambda"
+  local image="ghcr.io/withlogicco/sbx-kit-lambda:latest"
+
+  # Only needed until CI publishes the image; see "Prebuilt image" below.
+  # Requires a local clone, since the build needs the Dockerfile.
+  if [[ "${1:-}" == "--build" ]]; then
+    shift
+    docker build -t "$image" /path/to/sbx-kit-lambda || return 1
+  fi
 
   if [[ "${1:-}" == "--reset" ]] && sbx ls --quiet | grep -Fxq -- "$name"; then
     sbx rm --force "$name"
@@ -206,6 +214,45 @@ logins.
 
 Webi is the default for standalone CLI tools. Pi, Codex, and Claude Code use
 their upstream installers because Webi does not package them.
+
+All four are installed by `files/home/.lambda/install-tools.sh`. Every step in
+it is guarded and idempotent, so it is a no-op when the tools are already
+present.
+
+### Prebuilt image
+
+`setup.install` runs that script on every sandbox creation, which costs roughly
+60-90s. The repository's `Dockerfile` runs the *same* script on top of
+`docker/sandbox-templates:shell-docker` so the tools land in cached layers
+instead, and `sandbox.image` points at the resulting image.
+
+`.github/workflows/image.yml` publishes `linux/amd64` and `linux/arm64` to
+`ghcr.io/withlogicco/sbx-kit-lambda` on pushes to `main`, on tags, weekly, and
+on manual dispatch. The image is public, so no registry credential is needed.
+
+**Until that tag is published, build it locally.** sbx resolves `sandbox.image`
+from the local Docker image store first, so a local build satisfies it and no
+spec change is needed once CI takes over:
+
+```bash
+docker build -t ghcr.io/withlogicco/sbx-kit-lambda:latest .
+```
+
+The `lambda --build` helper above does this for you. Rebuild after changing the
+`Dockerfile` or `install-tools.sh`. Note that a local build masquerades as the
+GHCR tag, so `docker image inspect` is the only way to tell whether you are
+running a local build or the published one.
+
+`spec.yaml` also declares `sandbox.build` pointing at the `Dockerfile`, so the
+image's origin is discoverable from the spec. sbx does not act on it yet and
+emits a notice saying the image is taken from `sandbox.image`; that notice is
+expected. Declaring `build` *without* `image` is not possible — the kit fails
+validation with `sandbox.build is accepted in the schema but not yet
+implemented — specify sandbox.image`.
+
+If you would rather not build anything, point `sandbox.image` back at
+`docker/sandbox-templates:shell-docker`. The guarded script installs everything
+at creation time instead.
 
 ## VS Code Remote SSH
 
