@@ -6,10 +6,27 @@ description: "Pi coding agent with native Codex and Claude subagents"
 sourceURL: https://github.com/withlogicco/sbx-kit-lambda
 
 sandbox:
-  # shell-docker satisfies the base-agent contract (agent user at UID 1000,
-  # passwordless sudo, proxy env forwarding) and ships Docker for agents that
-  # need containers. Every agent binary is installed by setup.install below.
-  image: "docker/sandbox-templates:shell-docker"
+  # The agent binaries are baked into this image so they are not reinstalled on
+  # every sandbox creation. It is built from this repo's Dockerfile on top of
+  # docker/sandbox-templates:shell-docker, which provides the agent-image
+  # contract (agent user at UID 1000, passwordless sudo, /home/agent owned by
+  # agent, proxy env preserved across sudo) and ships Docker in the sandbox.
+  #
+  # Until .github/workflows/image.yml has published this tag, build it locally:
+  #
+  #   docker build -t ghcr.io/withlogicco/sbx-kit-lambda:latest .
+  #
+  # sbx resolves the tag from the local image store first, so a local build
+  # satisfies it and no spec change is needed when CI starts publishing.
+  # `setup.install` still runs install-tools.sh, which no-ops when the image
+  # already has the tools, so the kit also works on a plain shell-docker base.
+  image: "ghcr.io/withlogicco/sbx-kit-lambda:latest"
+  # Declares where the image comes from. sbx accepts this but does not act on it
+  # yet ("the image is taken from sandbox.image") and emits a notice saying so;
+  # it is recorded here so the source of the image is discoverable from the spec.
+  build:
+    context: .
+    dockerfile: Dockerfile
   # `lambda` is a symlink to `pi`, so the model/provider defaults ride in
   # `command` rather than in a wrapper script.
   entrypoint: [lambda]
@@ -200,33 +217,14 @@ setup:
     - command: 'if [ -n "${HTTP_PROXY:-}" ]; then npm config set proxy="$HTTP_PROXY" https-proxy="${HTTPS_PROXY:-$HTTP_PROXY}"; fi'
       user: "1000"
       description: "Configure npm to use the sandbox proxy"
-    - command: 'command -v pi >/dev/null 2>&1 || { i=0; while [ $i -lt 5 ]; do if curl -fsSL https://pi.dev/install.sh -o /tmp/pi-install.sh && sh /tmp/pi-install.sh; then break; fi; i=$((i+1)); echo "Retrying ($i/5)..."; sleep 2; done; [ $i -lt 5 ]; }'
+    # Tool installation lives in files/home/.lambda/install-tools.sh so the
+    # Dockerfile and this kit share one source of truth. Static files under
+    # files/home/ land before install commands run. Every step in the script is
+    # guarded, so this is a no-op against a prebuilt image that already has the
+    # tools.
+    - command: "sh /home/agent/.lambda/install-tools.sh"
       user: "1000"
-      description: "Install Pi coding agent with the pi.dev installer"
-    - command: |
-        set -eu
-        pi_path="$(command -v pi)"
-        ln -sfn "$pi_path" "$(dirname "$pi_path")/lambda"
-        lambda --version
-      user: "1000"
-      description: "Install the lambda agent as a symlink to pi"
-    - command: "command -v codex >/dev/null 2>&1 || npm install -g @openai/codex"
-      user: "1000"
-      description: "Install the native Codex CLI"
-    - command: "command -v claude >/dev/null 2>&1 || npm install -g @anthropic-ai/claude-code"
-      user: "1000"
-      description: "Install the native Claude Code CLI"
-    - command: |
-        set -eu
-        if [ ! -x "$HOME/.local/bin/gh" ]; then
-          installer="$(mktemp)"
-          curl -fsSL --retry 4 https://webi.sh/gh -o "$installer"
-          sh "$installer"
-          rm -f "$installer"
-        fi
-        "$HOME/.local/bin/gh" --version
-      user: "1000"
-      description: "Install GitHub CLI with Webi"
+      description: "Install Pi, the lambda binary, and the native Codex, Claude Code, and gh CLIs"
     # Point the native Codex CLI at the ChatGPT backend through a custom model
     # provider, mirroring what the built-in codex kit does in `oauth` mode. The
     # bearer token here is only a placeholder that makes Codex emit an

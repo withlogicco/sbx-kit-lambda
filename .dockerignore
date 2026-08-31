@@ -1,0 +1,6 @@
+# The build context only needs the Dockerfile and the shared install script.
+# `!files` un-excludes that tree; the Dockerfile COPYs a single path from it, so
+# the layer cache keys on that file alone, not on the rest of the kit.
+*
+!Dockerfile
+!files
