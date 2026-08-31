@@ -1,54 +1,158 @@
 schemaVersion: "2"
-kind: mixin
+kind: sandbox
 name: lambda
-displayName: lambda
-description: "lambda agent"
+displayName: Lambda
+description: "Pi coding agent with native Codex and Claude subagents"
+sourceURL: https://github.com/withlogicco/sbx-kit-lambda
 
-agentContext: |
-  ## AGENTS.md scope and ownership
+sandbox:
+  # shell-docker satisfies the base-agent contract (agent user at UID 1000,
+  # passwordless sudo, proxy env forwarding) and ships Docker for agents that
+  # need containers. Every agent binary is installed by setup.install below.
+  image: "docker/sandbox-templates:shell-docker"
+  # `lambda` is a symlink to `pi`, so the model/provider defaults ride in
+  # `command` rather than in a wrapper script.
+  entrypoint: [lambda]
+  command:
+    - --provider
+    - openai-codex
+    - --model
+    - gpt-5.6-sol
+    - --thinking
+    - high
+    - --models
+    - "openai-codex/gpt-5.6-sol:high,openai-codex/gpt-5.6-terra:max,openai-codex/gpt-5.6-luna:high,opencode-go/*"
 
-  - Keep `AGENTS.md` for rules and knowledge that affect the whole repository.
-  - Create and keep app-specific rules in `<app>/AGENTS.md` for Django projects, when guidance only applies to one app.
-  - When both global and local rules exist for a given scope, apply both, with the more specific file taking precedence for that scope.
+agentInstructions:
+  filename: AGENTS.md
+  content: |
+    ## AGENTS.md scope and ownership
 
-  ## Maintaining session learnings
+    - Keep `AGENTS.md` for rules and knowledge that affect the whole repository.
+    - Create and keep app-specific rules in `<app>/AGENTS.md` for Django projects, when guidance only applies to one app.
+    - When both global and local rules exist for a given scope, apply both, with the more specific file taking precedence for that scope.
 
-  - Every time the user corrects an important behavior or implementation decision, record that learning in the relevant `AGENTS.md` file in the same change set.
-  - Treat repeated corrections and workflow mistakes as high-priority learnings to persist.
-  - Keep learnings concise, actionable, and scoped to the right level (global, app-local, or `src`).
-  - Do not include learnings for things that make sense only in that session context.
+    ## Maintaining session learnings
 
-  ## Testing with Docker Compose
+    - Every time the user corrects an important behavior or implementation decision, record that learning in the relevant `AGENTS.md` file in the same change set.
+    - Treat repeated corrections and workflow mistakes as high-priority learnings to persist.
+    - Keep learnings concise, actionable, and scoped to the right level (global, app-local, or `src`).
+    - Do not include learnings for things that make sense only in that session context.
 
-  - When a Docker Compose configuration is present, boot its dependent services with the local Docker daemon (for example, `docker compose up -d`) and ensure their published ports are available on `localhost`.
-  - Run the web app's tests from the workspace, not from a Compose container. The web app's test command must supply the environment variables it needs to connect to those services through `localhost`.
-  - Use the .github/workflows files to understand what tests need to be run and how
+    ## Testing with Docker Compose
 
-  ## Plan conventions
+    - When a Docker Compose configuration is present, boot its dependent services with the local Docker daemon (for example, `docker compose up -d`) and ensure their published ports are available on `localhost`.
+    - Run the web app's tests from the workspace, not from a Compose container. The web app's test command must supply the environment variables it needs to connect to those services through `localhost`.
+    - Use the .github/workflows files to understand what tests need to be run and how.
 
-  - When creating a plan, always write it to `agents/plans/yyyy-mm-dd-slug.md`.
-  - Keep plans concise: scope, steps, relevant files, verification, and decisions.
-  - When done, keep only the plan as a log of the changes and decisions.
-  - Include an `agents/CHANGELOG.md` entry with the date, plan link, and short description for each plan.
+    ## Plan conventions
 
-caps:
+    - When creating a plan, always write it to `agents/plans/yyyy-mm-dd-slug.md`.
+    - Keep plans concise: scope, steps, relevant files, implementation, verification, and decisions.
+    - When done, keep only the plan as a log of the changes and decisions.
+    - Include an `agents/CHANGELOG.md` entry with the date, plan link, and short description for each plan.
+
+    ## Native subagents
+
+    - Never invoke Codex, Claude, or `run_subagent` proactively. Only delegate after the current user clearly asks for a native subagent.
+    - Once the user has requested delegation, invoke `run_subagent` normally. The tool itself does not second-guess or block the model's interpretation of that request.
+    - `codex` and `claude` are the real upstream CLIs in this sandbox; `lambda` is Pi. Never shell out to `lambda` from a subagent.
+    - Native subagents run inside the SBX security boundary and must proceed without asking for permission or approval.
+
+    ## Tool installation
+
+    - Install supported standalone CLI tools with Webi. Use an upstream installer or package manager only when Webi does not provide the tool, and document that exception.
+
+    ## Rules of engagement
+
+    - Do not create, amend, or push commits unless the user explicitly asks for a commit or PR.
+
+permissions:
   network:
     allow:
       - pi.dev
+      - webi.sh
       - registry.npmjs.org
       - opencode.ai
       - github.com
       - raw.githubusercontent.com
       - release-assets.githubusercontent.com
+      # OpenAI: OAuth token endpoint plus the Codex/ChatGPT backend hosts
+      - auth.openai.com
       - chatgpt.com
+      - api.openai.com
+      - openai.com
+      # Anthropic: OAuth token endpoint plus API and download hosts
+      - platform.claude.com
       - api.anthropic.com
       - claude.ai
       - console.anthropic.com
-      - platform.claude.com
+      - downloads.claude.ai
+      - claude.com
+      - registry.terraform.io
+      - docs.cloud.google.com
+      # VS Code server download and extension gallery (Remote-SSH installs)
+      - update.code.visualstudio.com
+      - vscode.download.prss.microsoft.com
+      - marketplace.visualstudio.com
+      - vscode.blob.core.windows.net
+      - "*.vsassets.io"
+      # GitHub CLI API access
+      - api.github.com
+      - objects.githubusercontent.com
+
+environment:
+  variables:
+    # Claude Code checks this before accepting --dangerously-skip-permissions.
+    IS_SANDBOX: "1"
+    CODEX_HOME: /home/agent/.codex
+    # A 401 from the credentials proxy must fail fast instead of making git
+    # open /dev/tty for a username, which would freeze the TUI.
+    GIT_TERMINAL_PROMPT: "0"
 
 credentials:
+  # Host-minted ChatGPT access token. Proxy-managed OAuth does not activate for
+  # a third-party sandbox kit (verified), but API-key injection does, so the
+  # host mints and refreshes the token and the proxy substitutes it per request.
+  # The token never enters the sandbox.
+  #
+  #   sbx secret set chatgpt-codex \
+  #     --command 'pi auth print-bearer-token --provider openai-codex' \
+  #     --refresh on-demand
+  #
+  # Deliberately NOT named `openai`: --command cannot combine with --oauth, so
+  # reusing that service id would replace the built-in codex agent's OAuth
+  # registration and break plain `sbx run codex`.
+  #
+  # Both consumers must emit an Authorization header for chatgpt.com before the
+  # proxy can overwrite it: Pi does so via sbx-codex.ts, and the native Codex
+  # CLI via the `sandboxd` model provider seeded into ~/.codex/config.toml.
+  - service: chatgpt-codex
+    description: "ChatGPT subscription access token, minted on the host by Pi"
+    required: true
+    apiKey:
+      name: LAMBDA_CHATGPT_TOKEN
+      proxyManaged: true
+      inject:
+        - domain: chatgpt.com
+          header: Authorization
+          format: "Bearer %s"
+  # Long-lived Claude Code token from `claude setup-token` on the host, stored
+  # with `sbx secret set claude-code --token`. Claude Code sends an OAuth token
+  # as a bearer, so the proxy overwrites the same header.
+  - service: claude-code
+    description: "Long-lived Claude Code token from `claude setup-token`"
+    required: false
+    apiKey:
+      name: CLAUDE_CODE_OAUTH_TOKEN
+      proxyManaged: true
+      inject:
+        - domain: api.anthropic.com
+          header: Authorization
+          format: "Bearer %s"
   - service: opencode-go
-    description: "OpenCode Go API key"
+    description: "OpenCode Go API key used by Pi"
+    required: true
     apiKey:
       name: OPENCODE_API_KEY
       proxyManaged: true
@@ -56,66 +160,135 @@ credentials:
         - domain: opencode.ai
           header: Authorization
           format: "Bearer %s"
+  - service: github
+    description: "GitHub token for the gh CLI and git over HTTPS"
+    required: false
+    apiKey:
+      name: GH_TOKEN
+      proxyManaged: true
+      inject:
+        - domain: api.github.com
+          scheme: bearer
+        - domain: raw.githubusercontent.com
+          scheme: bearer
+        - domain: github.com
+          scheme: basic
+          username: x-access-token
 
-commands:
+# Volumes survive sandbox recreation. `~/.pi/agent` as a whole is deliberately
+# NOT mounted: the kit ships its extensions and models.json into
+# `~/.pi/agent/extensions/` and `~/.pi/agent/models.json`, and a volume there
+# would shadow or stale-cache kit-owned files across kit updates. Only Pi's
+# session storage is persisted.
+volumes:
+  - path: /home/agent/.pi/agent/sessions
+    size: 2g
+  - path: /home/agent/.claude
+    size: 2g
+  - path: /home/agent/.codex
+    size: 1g
+
+setup:
   install:
-    - command: "npm config set proxy $HTTP_PROXY && npm config set https-proxy $HTTP_PROXY"
+    - command: |
+        set -eu
+        mkdir -p /home/agent/.pi/agent/extensions /home/agent/.pi/agent/sessions \
+                 /home/agent/.claude /home/agent/.codex /home/agent/.agents
+        chown -R agent:agent /home/agent/.pi /home/agent/.claude /home/agent/.codex /home/agent/.agents
+      user: "0"
+      description: "Ensure agent ownership of the Pi, Claude, and Codex home directories"
+    - command: 'if [ -n "${HTTP_PROXY:-}" ]; then npm config set proxy="$HTTP_PROXY" https-proxy="${HTTPS_PROXY:-$HTTP_PROXY}"; fi'
       user: "1000"
-      description: "Configure npm proxy for the Pi installer"
-    - command: 'i=0; while [ $i -lt 5 ]; do if curl -fsSL https://pi.dev/install.sh -o /tmp/pi-install.sh && sh /tmp/pi-install.sh; then break; fi; i=$((i+1)); echo "Retrying ($i/5)..."; sleep 2; done; [ $i -lt 5 ]'
+      description: "Configure npm to use the sandbox proxy"
+    - command: 'command -v pi >/dev/null 2>&1 || { i=0; while [ $i -lt 5 ]; do if curl -fsSL https://pi.dev/install.sh -o /tmp/pi-install.sh && sh /tmp/pi-install.sh; then break; fi; i=$((i+1)); echo "Retrying ($i/5)..."; sleep 2; done; [ $i -lt 5 ]; }'
       user: "1000"
       description: "Install Pi coding agent with the pi.dev installer"
     - command: |
         set -eu
-        version="0.30.0"
-        case "$(uname -m)" in
-          x86_64|amd64)
-            asset="jj-v${version}-x86_64-unknown-linux-musl.tar.gz"
-            sha256="5540b5438d71867ccde3339d041e57eecf60edf8b4ecc3dfcce2af106e08f70b"
-            ;;
-          aarch64|arm64)
-            asset="jj-v${version}-aarch64-unknown-linux-musl.tar.gz"
-            sha256="36001ee38b14d0241e8c061f3147e4c52754b02cc32c4e3f09ebf641cb28f6b9"
-            ;;
-          *) echo "Unsupported jj architecture: $(uname -m)" >&2; exit 1 ;;
-        esac
-        archive="/tmp/${asset}"
-        curl -fsSL --retry 4 "https://github.com/jj-vcs/jj/releases/download/v${version}/${asset}" -o "$archive"
-        echo "${sha256}  ${archive}" | sha256sum -c -
-        install_dir="$(mktemp -d)"
-        tar -xzf "$archive" -C "$install_dir"
-        install -m 0755 "$(find "$install_dir" -type f -name jj -print -quit)" /usr/local/bin/jj.new
-        mv /usr/local/bin/jj.new /usr/local/bin/jj
-        jj --version
-        rm -rf "$install_dir" "$archive"
-      user: "0"
-      description: "Install pinned Jujutsu for private Lambda turn history"
-    - command: "npm install -g @anthropic-ai/claude-code"
-      user: "0"
+        pi_path="$(command -v pi)"
+        ln -sfn "$pi_path" "$(dirname "$pi_path")/lambda"
+        lambda --version
+      user: "1000"
+      description: "Install the lambda agent as a symlink to pi"
+    - command: "command -v codex >/dev/null 2>&1 || npm install -g @openai/codex"
+      user: "1000"
+      description: "Install the native Codex CLI"
+    - command: "command -v claude >/dev/null 2>&1 || npm install -g @anthropic-ai/claude-code"
+      user: "1000"
       description: "Install the native Claude Code CLI"
     - command: |
-        cat > /usr/local/share/npm-global/bin/sbx-claude <<'SH'
-        #!/bin/sh
-        exec claude "$@"
-        SH
-        chmod +x /usr/local/share/npm-global/bin/sbx-claude
-      user: "0"
-      description: "Preserve native Claude Code as sbx-claude"
-    - command: |
-        mv /usr/local/share/npm-global/bin/codex /usr/local/share/npm-global/bin/sbx-codex
-        cat > /usr/local/share/npm-global/bin/codex <<'SH'
-        #!/bin/sh
         set -eu
-        if [ "${1:-}" = "--dangerously-bypass-approvals-and-sandbox" ]; then
-          shift
+        if [ ! -x "$HOME/.local/bin/gh" ]; then
+          installer="$(mktemp)"
+          curl -fsSL --retry 4 https://webi.sh/gh -o "$installer"
+          sh "$installer"
+          rm -f "$installer"
         fi
-        exec pi \
-          --provider openai-codex \
-          --model gpt-5.6-terra \
-          --thinking high \
-          --models "openai-codex/*,opencode-go/*" \
-          "$@"
-        SH
-        chmod +x /usr/local/share/npm-global/bin/codex
+        "$HOME/.local/bin/gh" --version
+      user: "1000"
+      description: "Install GitHub CLI with Webi"
+    # Point the native Codex CLI at the ChatGPT backend through a custom model
+    # provider, mirroring what the built-in codex kit does in `oauth` mode. The
+    # bearer token here is only a placeholder that makes Codex emit an
+    # Authorization header; the proxy overwrites it with the host-minted token
+    # from the `chatgpt-codex` credential. requires_openai_auth = false stops
+    # Codex from insisting on its own login, and forced_login_method = "api"
+    # stops a remote client from replacing this with sandbox-local OAuth.
+    # Rewritten unconditionally on every create, so it is deterministic and
+    # idempotent even though ~/.codex is a volume.
+    - command: |
+        set -eu
+        mkdir -p /home/agent/.codex
+        cat > /home/agent/.codex/config.toml <<'EOF'
+        approval_policy = "never"
+        sandbox_mode = "danger-full-access"
+        mcp_oauth_credentials_store = "file"
+        forced_login_method = "api"
+        model_provider = "sandboxd"
+
+        [model_providers.sandboxd]
+        name = "Sandbox Proxy"
+        base_url = "https://chatgpt.com/backend-api/codex"
+        experimental_bearer_token = "oai-oat01-proxy-managed"
+        requires_openai_auth = false
+        EOF
+        printf '%s' '{"OPENAI_API_KEY":"proxy-managed"}' > /home/agent/.codex/auth.json
+        chmod 600 /home/agent/.codex/auth.json
+      user: "1000"
+      description: "Point the native Codex CLI at the proxy-injected ChatGPT backend"
+    # ~/.claude.json holds Claude Code's onboarding/trust/bypass flags and is
+    # credential-independent. Written as root and chowned because the file may
+    # already exist with restrictive ownership.
+    - command: |
+        set -e
+        ws="${WORKSPACE_DIR:-/}"
+        esc=$(printf '%s' "$ws" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r/\\r/g')
+        projects="\"/\": { \"hasTrustDialogAccepted\": true }"
+        [ "$ws" = "/" ] || projects="$projects, \"$esc\": { \"hasTrustDialogAccepted\": true }"
+        printf '%s\n' "{
+          \"bypassPermissionsModeAccepted\": true,
+          \"hasCompletedOnboarding\": true,
+          \"projects\": { $projects }
+        }" > /home/agent/.claude.json
+        chown agent:agent /home/agent/.claude.json
       user: "0"
-      description: "Make Codex launch lambda while retaining SBX OAuth identity"
+      description: "Seed Claude Code bypass and trust flags"
+    # No apiKeyHelper here, deliberately. The built-in claude kit seeds
+    # `apiKeyHelper: "echo proxy-managed"` so Claude Code presents the proxy
+    # sentinel, but proxy-managed OAuth does not activate for a third-party
+    # sandbox kit (verified: the proxy never substitutes the sentinel). Writing
+    # the helper would make Claude Code send a dead sentinel and never prompt,
+    # which breaks the in-sandbox `/login` that is the only working path here.
+    # SBX_CRED_ANTHROPIC_MODE is not a usable gate either: it reports `apikey`
+    # even for a credential this kit declares as OAuth-only.
+    - command: |
+        set -e
+        mkdir -p /home/agent/.claude
+        printf '%s' "{
+          \"alwaysThinkingEnabled\": true,
+          \"defaultMode\": \"bypassPermissions\",
+          \"bypassPermissionsModeAccepted\": true
+        }
+        " > /home/agent/.claude/settings.json
+      user: "1000"
+      description: "Seed Claude Code settings"
