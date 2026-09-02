@@ -38,9 +38,10 @@ sbx secret set chatgpt-codex \
   --command 'pi auth print-bearer-token --provider openai-codex' \
   --refresh on-demand
 
-# Claude subscription: generate a long-lived token, then store it
-claude setup-token
-sbx secret set claude-code --token
+# Claude usage-based access, minted fresh on every request by Pi on the host
+sbx secret set claude-code \
+  --command 'pi auth print-bearer-token --provider anthropic' \
+  --refresh on-demand
 
 # OpenCode Go, and GitHub for gh and git over HTTPS
 sbx secret set opencode-go
@@ -58,13 +59,24 @@ for each service and the domains it may inject into. Approvals live in
 | -------- | ----- | ------------------ | ---------- |
 | Pi (`lambda`) | Authorization header via `sbx-codex.ts` | `chatgpt.com` | `chatgpt-codex` |
 | Native `codex` | Authorization header via the `sandboxd` model provider in `~/.codex/config.toml` | `chatgpt.com` | `chatgpt-codex` |
-| Native `claude` | Authorization bearer from `CLAUDE_CODE_OAUTH_TOKEN` | `api.anthropic.com` | `claude-code` |
+| Native `claude` | Authorization bearer from `CLAUDE_CODE_OAUTH_TOKEN` | `api.anthropic.com` | `claude-code` (usage-based) |
+| Pi's `anthropic/*` models | Authorization header via `sbx-anthropic.ts` | `api.anthropic.com` | `claude-code` (usage-based) |
 | Pi's OpenCode Go provider | `OPENCODE_API_KEY` | `opencode.ai` | `opencode-go` |
 | `gh`, `git` | `GH_TOKEN` | `api.github.com`, `github.com`, `raw.githubusercontent.com` | `github` |
 
-Both ChatGPT consumers only need to *emit* an `Authorization` header —
-`apiKey.inject` overwrites whatever it contains, so the placeholder values in
-`sbx-codex.ts` and `config.toml` are not secrets and are never sent upstream.
+Consumers only need to *emit* an `Authorization` header — `apiKey.inject`
+overwrites whatever it contains, so the placeholder values in `sbx-codex.ts`,
+`sbx-anthropic.ts`, and `config.toml` are not secrets and are never sent
+upstream. One injection rule serves every consumer on a domain, which is why
+Pi's Claude models and the native `claude` CLI share the `claude-code`
+credential, so both use the same usage-based billing mode.
+
+Pi picks its Anthropic auth mode from the *shape* of the key: only one
+containing `sk-ant-oat` takes the OAuth path that sends `Authorization: Bearer`
+(along with the Claude Code identity headers, system prompt, and tool naming
+Anthropic expects from such a token). Anything else is sent as `x-api-key`,
+which the proxy does not rewrite. `sbx-anthropic.ts` exists to satisfy that
+check — its sentinel is shaped like an OAuth token and is otherwise meaningless.
 
 > [!NOTE]
 > The `chatgpt-codex` service is deliberately not named `openai`. `sbx secret
@@ -76,12 +88,13 @@ Both ChatGPT consumers only need to *emit* an `Authorization` header —
 
 Neither subscription can be used with an API key: ChatGPT Plus/Pro and Claude
 Pro/Max are OAuth-only, and an OpenAI or Anthropic API key is a separate,
-pay-per-token account. The host-minted-token approach above is what keeps the
-subscription in play without a per-sandbox browser login.
+pay-per-token account. The host-minted-token approach above avoids a
+per-sandbox browser login. Anthropic calls using the shared `claude-code`
+credential are usage-based.
 
-If you would rather log in inside the sandbox, that still works and persists in
-the `~/.claude` and `~/.codex` volumes — but only for that one sandbox, and the
-real token then lives in the VM.
+If you log in inside the sandbox instead, that authentication lasts only until
+sandbox recreation. Credentials are deliberately outside the narrowly scoped
+session volumes; host-managed authentication is the persistent path.
 
 Global credentials are applied when a sandbox is created. Recreate an existing
 sandbox after adding or changing one.
@@ -128,7 +141,10 @@ Override any role with `LAMBDA_<BACKEND>_<ROLE>_MODEL` and
 
 Pi starts on `openai-codex/gpt-5.6-sol` with high thinking. Its model picker is
 scoped to Sol (high), Terra (`max` in Pi, mapped to upstream `ultra` by
-`files/home/.pi/agent/models.json`), Luna (high), and OpenCode Go models.
+`files/home/.pi/agent/models.json`), Luna (high), OpenCode Go models, and the
+Anthropic catalog (`anthropic/*` — Opus 5, Sonnet 5, Fable 5, Haiku 4.5, and the
+4.x line). The Claude models need the usage-based `claude-code` credential;
+without it they appear in the picker but fail to authenticate.
 
 ## Run
 
@@ -139,6 +155,19 @@ current directory:
 lambda() {
   local name="lambda-${PWD:t}"
   local kit="git+https://github.com/withlogicco/sbx-kit-lambda"
+  local image="ghcr.io/withlogicco/sbx-kit-lambda:latest"
+
+  # Only needed until CI publishes the image; see "Prebuilt image" below.
+  # Requires a local clone, since the build needs the Dockerfile. The save/load
+  # step is not optional: the sandbox runtime has its own image store and never
+  # reads the host daemon's.
+  if [[ "${1:-}" == "--build" ]]; then
+    shift
+    docker build -t "$image" /path/to/sbx-kit-lambda || return 1
+    docker save "$image" -o "${TMPDIR:-/tmp}/lambda-image.tar" || return 1
+    sbx template load "${TMPDIR:-/tmp}/lambda-image.tar" || return 1
+    rm -f "${TMPDIR:-/tmp}/lambda-image.tar"
+  fi
 
   if [[ "${1:-}" == "--reset" ]] && sbx ls --quiet | grep -Fxq -- "$name"; then
     sbx rm --force "$name"
@@ -181,14 +210,20 @@ Volumes survive sandbox recreation:
 | Path | Contents |
 | ---- | -------- |
 | `/home/agent/.pi/agent/sessions` | Pi session history |
-| `/home/agent/.claude` | Claude Code credentials, settings, and session state |
-| `/home/agent/.codex` | Codex CLI state |
+| `/home/agent/.claude/projects` | Claude Code transcripts used by `--resume` and `--continue`, plus co-located project memory |
+| `/home/agent/.codex/sessions` | Codex rollout transcripts used by `codex resume` |
+
+The volume roots are limited to resumable conversations. Claude also stores its
+auto-memory below `projects`, so that state is unavoidably included in the same
+volume. CLI credentials, settings, caches, prompt history, plugins, MCP
+configuration, and Claude's file checkpoints are not needed for resume and are
+intentionally discarded on recreation. The kit recreates the required Codex
+and Claude settings during setup, while authentication is host-managed.
 
 `~/.pi/agent` as a whole is deliberately not persisted: the kit ships
 `models.json` and its extensions into that directory, and a volume there would
 shadow kit-owned files across kit updates. Pi's `auth.json` therefore does not
-survive recreation, which does not matter because auth is host-managed rather
-than stored in the sandbox.
+survive recreation for the same reason.
 
 Volumes are keyed to the sandbox name, so they are never shared between
 sandboxes. That is why credentials are resolved from the host secret store
@@ -206,6 +241,53 @@ logins.
 
 Webi is the default for standalone CLI tools. Pi, Codex, and Claude Code use
 their upstream installers because Webi does not package them.
+
+All four are installed by `files/home/.lambda/install-tools.sh`. Every step in
+it is guarded and idempotent, so it is a no-op when the tools are already
+present.
+
+### Prebuilt image
+
+`setup.install` runs that script on every sandbox creation, which costs roughly
+60-90s. The repository's `Dockerfile` runs the *same* script on top of
+`docker/sandbox-templates:shell-docker` so the tools land in cached layers
+instead, and `sandbox.image` points at the resulting image.
+
+`.github/workflows/image.yml` publishes `linux/amd64` and `linux/arm64` to
+`ghcr.io/withlogicco/sbx-kit-lambda` on pushes to `main`, on tags, weekly, and
+on manual dispatch. The image is public, so no registry credential is needed.
+
+**Until that tag is published, build it locally — and hand the result to the
+sandbox runtime.** The runtime keeps its own image store (`sbx template ls`)
+and does not fall back to the host Docker daemon's, so an image that only
+exists on the host still fails creation with `403 Forbidden: pull failed for
+image ...`. Building is therefore two steps, not one:
+
+```bash
+docker build -t ghcr.io/withlogicco/sbx-kit-lambda:latest .
+docker save ghcr.io/withlogicco/sbx-kit-lambda:latest -o /tmp/lambda-image.tar
+sbx template load /tmp/lambda-image.tar
+```
+
+Once the tag is in that store, sbx uses it instead of pulling, so no spec change
+is needed once CI takes over.
+
+The `lambda --build` helper above does all of this for you. Rebuild after
+changing the `Dockerfile` or `install-tools.sh` — and re-load, since the runtime
+keeps serving the previously loaded layers otherwise. Note that a local build
+masquerades as the GHCR tag, so `sbx template ls` (image ID and age) is the only
+way to tell whether you are running a local build or the published one.
+
+`spec.yaml` also declares `sandbox.build` pointing at the `Dockerfile`, so the
+image's origin is discoverable from the spec. sbx does not act on it yet and
+emits a notice saying the image is taken from `sandbox.image`; that notice is
+expected. Declaring `build` *without* `image` is not possible — the kit fails
+validation with `sandbox.build is accepted in the schema but not yet
+implemented — specify sandbox.image`.
+
+If you would rather not build anything, point `sandbox.image` back at
+`docker/sandbox-templates:shell-docker`. The guarded script installs everything
+at creation time instead.
 
 ## VS Code Remote SSH
 

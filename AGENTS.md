@@ -22,6 +22,23 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
   Claude Code are the documented exceptions.
 - `npm install -g` runs as the agent user (UID 1000): the base image ships an
   agent-owned `/usr/local/share/npm-global` that is already on `PATH`.
+- Tool installation belongs in `files/home/.lambda/install-tools.sh` and
+  nowhere else. Both the `Dockerfile` and `setup.install` run that script, so
+  never duplicate an install step into either one. Keep every step guarded and
+  idempotent: `setup.install` runs it on every sandbox creation, and it must
+  no-op against a prebuilt image.
+- Beyond that script, `setup.install` is for runtime-dependent work only:
+  volume-mount ownership, npm proxy configuration, and config seeding that reads
+  `WORKSPACE_DIR` or `HTTP_PROXY`.
+- `sandbox.build` is declared for discoverability but sbx does not act on it.
+  Expect one notice on every `sbx kit validate` / `sbx kit inspect` saying the
+  image is taken from `sandbox.image`; that is not a regression. Declaring
+  `build` without `image` fails validation outright, so `image` must always be
+  set. The image is built by `.github/workflows/image.yml`, or locally until CI
+  publishes the tag — and a local `docker build` alone is not enough: the
+  sandbox runtime has its own image store, so the build must be handed over
+  with `docker save ... -o file.tar` followed by `sbx template load file.tar`,
+  or creation fails with `403 Forbidden: pull failed`.
 - Native subagents must be invoked as `codex` and `claude`. Never shell out to
   `lambda` or `pi` from the subagent extension.
 - Never start a native subagent proactively. The current user must clearly ask
@@ -38,28 +55,40 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
 - API-key injection does work, so host-managed auth is rebuilt on top of it.
   The host mints and refreshes tokens; the proxy substitutes them per request.
   Never store a real token in the sandbox or in kit files.
-- `chatgpt-codex` must not be renamed to `openai`. `sbx secret set --command`
-  cannot combine with `--oauth`, so reusing `openai` would replace the built-in
-  Codex agent's OAuth registration and break plain `sbx run codex`.
+- `chatgpt-codex` must not be renamed to `openai`, and `claude-code` must not be
+  renamed to `anthropic`. `sbx secret set --command` cannot combine with
+  `--oauth`, so reusing a built-in service id would replace that agent's OAuth
+  registration and break plain `sbx run codex` / `sbx run claude`.
 - `apiKey.inject` overwrites whatever the named header contains, so a consumer
-  only has to emit the header. Pi does that through `sbx-codex.ts`; the native
-  Codex CLI through the `sandboxd` model provider in `~/.codex/config.toml`.
-  Do not delete either: without them no header is sent and there is nothing for
+  only has to emit the header, and one rule per domain serves every consumer on
+  it. Pi emits through `sbx-codex.ts` and `sbx-anthropic.ts`; the native Codex
+  CLI through the `sandboxd` model provider in `~/.codex/config.toml`. Do not
+  delete any of them: without them no header is sent and there is nothing for
   the proxy to substitute.
 - Never seed `apiKeyHelper` into `~/.claude/settings.json`. It only works with
   provenance-backed OAuth interception; here it would make Claude Code send a
   dead sentinel and never prompt. `SBX_CRED_ANTHROPIC_MODE` is not a usable
   gate either — it reports `apikey` for an OAuth-only declaration.
-- Pi's Anthropic provider is intentionally not wired up. It is outside the
-  `--models` picker scope, and third-party harness usage bills per token from
-  Anthropic extra usage rather than against the plan, so the subscription only
-  pays off through the native `claude` CLI.
+- Pi's Anthropic provider is wired up through `sbx-anthropic.ts` and `anthropic/*`
+  is in the `--models` picker scope. The sentinel it registers must keep the
+  `sk-ant-oat` substring: Pi selects Bearer auth, the Claude Code identity
+  headers and system prompt, and Claude Code tool naming from that shape alone,
+  and any other key shape is sent as `x-api-key`, which the proxy never rewrites.
+- Anthropic usage through the `claude-code` credential is usage-based. Pi's
+  `anthropic/*` models and the native `claude` CLI share the same host-minted
+  bearer token and proxy injection rule, so neither can have a different billing
+  mode within this kit.
 - Every credential a third-party v2 kit declares needs a user-approved binding.
   Adding a credential or a new inject domain means a new first-run prompt.
 
 ## Volumes
 
-- Persist `~/.pi/agent/sessions`, `~/.claude`, and `~/.codex`.
+- Persist only the narrowest resumable conversation stores:
+  `~/.pi/agent/sessions`, `~/.claude/projects`, and `~/.codex/sessions`.
+  Claude's project memory is co-located under `projects` and is therefore also
+  retained. Do not persist either native CLI's whole state directory; setup
+  recreates required configuration and credentials belong in the host secret
+  store.
 - Never mount a volume over `~/.pi/agent` itself: the kit ships `models.json`
   and its extensions there, and a volume would shadow kit-owned files across
   kit updates.
