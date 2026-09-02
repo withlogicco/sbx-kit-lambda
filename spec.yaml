@@ -51,44 +51,41 @@ agentInstructions:
   content: |
     ## AGENTS.md scope and ownership
 
-    - Keep `AGENTS.md` for rules and knowledge that affect the whole repository.
-    - Create and keep app-specific rules in `<app>/AGENTS.md` for Django projects, when guidance only applies to one app.
-    - When both global and local rules exist for a given scope, apply both, with the more specific file taking precedence for that scope.
+    - Keep `AGENTS.md` for rules and knowledge that affect the way you write code and structure the repository.
+    - Include important documentation and rules in function documentation.
+    - Decisions that need explanation or context should be recorded as inline comments.
+    - That said, do not overdocument and avoid documenting obvious or trivial things. The goal is to make the code and its structure self-explanatory, not to create a separate knowledge base.
 
     ## Maintaining session learnings
 
-    - Every time the user corrects an important behavior or implementation decision, record that learning in the relevant `AGENTS.md` file in the same change set.
+    - Every time the user corrects an important behavior or implementation decision, record that learning in `AGENTS.md` file in the same change set, or the respective file as code comments.
     - Treat repeated corrections and workflow mistakes as high-priority learnings to persist.
     - Keep learnings concise, actionable, and scoped to the right level (global, app-local, or `src`).
     - Do not include learnings for things that make sense only in that session context.
 
     ## Testing with Docker Compose
 
-    - When a Docker Compose configuration is present, boot its dependent services with the local Docker daemon (for example, `docker compose up -d`) and ensure their published ports are available on `localhost`.
+    - When a Docker Compose configuration is present, boot its dependent services with the local Docker daemon (for example, `docker compose up -d postgres redis`) and ensure their published ports are available on `localhost`.
     - Run the web app's tests from the workspace, not from a Compose container. The web app's test command must supply the environment variables it needs to connect to those services through `localhost`.
-    - Use the .github/workflows files to understand what tests need to be run and how.
+    - Use the .github/workflows files to understand what tests and linting need to be run and how.
 
     ## Plan conventions
 
-    - When creating a plan, always write it to `agents/plans/yyyy-mm-dd-slug.md`.
+    - When creating a plan, always write it to `agents/plans/{slug}.md`.
     - Keep plans concise: scope, steps, relevant files, implementation, verification, and decisions.
-    - When done, keep only the plan as a log of the changes and decisions.
-    - Include an `agents/CHANGELOG.md` entry with the date, plan link, and short description for each plan.
+    - When done, keep only the plan as a log of the changes and decisions. In case the plan is very trivial and does not contain decisions, remove it completely.
 
     ## Native subagents
 
     - Never invoke Codex, Claude, or `run_subagent` proactively. Only delegate after the current user clearly asks for a native subagent.
     - Once the user has requested delegation, invoke `run_subagent` normally. The tool itself does not second-guess or block the model's interpretation of that request.
-    - `codex` and `claude` are the real upstream CLIs in this sandbox; `lambda` is Pi. Never shell out to `lambda` from a subagent.
     - Native subagents run inside the SBX security boundary and must proceed without asking for permission or approval.
-
-    ## Tool installation
-
-    - Install supported standalone CLI tools with Webi. Use an upstream installer or package manager only when Webi does not provide the tool, and document that exception.
 
     ## Rules of engagement
 
     - Do not create, amend, or push commits unless the user explicitly asks for a commit or PR.
+    - When you need the user to review a change, always stage the changes locally and ask for a review.
+    - Always create worktrees in the .worktrees directory within the repository. If .worktrees is not Git ignored globally, add it to the repository's .gitignore.
 
 permissions:
   network:
@@ -134,22 +131,9 @@ environment:
     GIT_TERMINAL_PROMPT: "0"
 
 credentials:
-  # Host-minted ChatGPT access token. Proxy-managed OAuth does not activate for
-  # a third-party sandbox kit (verified), but API-key injection does, so the
-  # host mints and refreshes the token and the proxy substitutes it per request.
-  # The token never enters the sandbox.
-  #
   #   sbx secret set chatgpt-codex \
   #     --command 'pi auth print-bearer-token --provider openai-codex' \
   #     --refresh on-demand
-  #
-  # Deliberately NOT named `openai`: --command cannot combine with --oauth, so
-  # reusing that service id would replace the built-in codex agent's OAuth
-  # registration and break plain `sbx run codex`.
-  #
-  # Both consumers must emit an Authorization header for chatgpt.com before the
-  # proxy can overwrite it: Pi does so via sbx-codex.ts, and the native Codex
-  # CLI via the `sandboxd` model provider seeded into ~/.codex/config.toml.
   - service: chatgpt-codex
     description: "ChatGPT subscription access token, minted on the host by Pi"
     required: true
@@ -160,23 +144,9 @@ credentials:
         - domain: chatgpt.com
           header: Authorization
           format: "Bearer %s"
-  # Anthropic usage-based access token, minted and refreshed on the host exactly
-  # like the ChatGPT one above:
-  #
   #   sbx secret set claude-code \
   #     --command 'pi auth print-bearer-token --provider anthropic' \
   #     --refresh on-demand
-  #
-  # Deliberately NOT named `anthropic`: that is a built-in sbx service id, and
-  # --command cannot combine with --oauth, so reusing it would replace the
-  # built-in claude agent's OAuth registration — the same trap documented for
-  # `openai` above.
-  #
-  # One injection rule covers both consumers, because both send a bearer on the
-  # same domain: the native Claude Code CLI behind the /claude subagent, and Pi
-  # itself for the `anthropic/*` models in the picker. Pi only emits that header
-  # when its API key looks like an OAuth token, which is what the sentinel in
-  # extensions/sbx-anthropic.ts is for.
   - service: claude-code
     description: "Anthropic usage-based access token, minted on the host by Pi"
     required: false
@@ -212,17 +182,18 @@ credentials:
           scheme: basic
           username: x-access-token
 
-# Volumes survive sandbox recreation. `~/.pi/agent` as a whole is deliberately
-# NOT mounted: the kit ships its extensions and models.json into
-# `~/.pi/agent/extensions/` and `~/.pi/agent/models.json`, and a volume there
-# would shadow or stale-cache kit-owned files across kit updates. Only Pi's
-# session storage is persisted.
+# Volumes survive sandbox recreation. Persist only the narrowest conversation
+# stores needed to resume sessions; Claude's co-located project memory is also
+# retained. Configuration, credentials, caches, and other CLI state are
+# intentionally recreated with the sandbox. `~/.pi/agent` as a whole must not
+# be mounted because that would shadow the kit-owned extensions and models.json
+# across kit updates.
 volumes:
   - path: /home/agent/.pi/agent/sessions
     size: 2g
-  - path: /home/agent/.claude
+  - path: /home/agent/.claude/projects
     size: 2g
-  - path: /home/agent/.codex
+  - path: /home/agent/.codex/sessions
     size: 1g
 
 setup:
@@ -230,7 +201,7 @@ setup:
     - command: |
         set -eu
         mkdir -p /home/agent/.pi/agent/extensions /home/agent/.pi/agent/sessions \
-                 /home/agent/.claude /home/agent/.codex /home/agent/.agents
+                 /home/agent/.claude/projects /home/agent/.codex/sessions /home/agent/.agents
         chown -R agent:agent /home/agent/.pi /home/agent/.claude /home/agent/.codex /home/agent/.agents
       user: "0"
       description: "Ensure agent ownership of the Pi, Claude, and Codex home directories"
@@ -253,7 +224,7 @@ setup:
     # Codex from insisting on its own login, and forced_login_method = "api"
     # stops a remote client from replacing this with sandbox-local OAuth.
     # Rewritten unconditionally on every create, so it is deterministic and
-    # idempotent even though ~/.codex is a volume.
+    # idempotent. Only ~/.codex/sessions is persisted.
     - command: |
         set -eu
         mkdir -p /home/agent/.codex
