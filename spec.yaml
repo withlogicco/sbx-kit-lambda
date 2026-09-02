@@ -44,7 +44,7 @@ sandbox:
     - --thinking
     - high
     - --models
-    - "openai-codex/gpt-5.6-sol:high,openai-codex/gpt-5.6-terra:max,openai-codex/gpt-5.6-luna:high,opencode-go/*"
+    - "openai-codex/gpt-5.6-sol:high,openai-codex/gpt-5.6-terra:max,openai-codex/gpt-5.6-luna:high,opencode-go/*,anthropic/*"
 
 agentInstructions:
   filename: AGENTS.md
@@ -160,11 +160,25 @@ credentials:
         - domain: chatgpt.com
           header: Authorization
           format: "Bearer %s"
-  # Long-lived Claude Code token from `claude setup-token` on the host, stored
-  # with `sbx secret set claude-code --token`. Claude Code sends an OAuth token
-  # as a bearer, so the proxy overwrites the same header.
+  # Anthropic usage-based access token, minted and refreshed on the host exactly
+  # like the ChatGPT one above:
+  #
+  #   sbx secret set claude-code \
+  #     --command 'pi auth print-bearer-token --provider anthropic' \
+  #     --refresh on-demand
+  #
+  # Deliberately NOT named `anthropic`: that is a built-in sbx service id, and
+  # --command cannot combine with --oauth, so reusing it would replace the
+  # built-in claude agent's OAuth registration — the same trap documented for
+  # `openai` above.
+  #
+  # One injection rule covers both consumers, because both send a bearer on the
+  # same domain: the native Claude Code CLI behind the /claude subagent, and Pi
+  # itself for the `anthropic/*` models in the picker. Pi only emits that header
+  # when its API key looks like an OAuth token, which is what the sentinel in
+  # extensions/sbx-anthropic.ts is for.
   - service: claude-code
-    description: "Long-lived Claude Code token from `claude setup-token`"
+    description: "Anthropic usage-based access token, minted on the host by Pi"
     required: false
     apiKey:
       name: CLAUDE_CODE_OAUTH_TOKEN

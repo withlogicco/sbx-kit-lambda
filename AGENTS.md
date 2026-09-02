@@ -55,22 +55,29 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
 - API-key injection does work, so host-managed auth is rebuilt on top of it.
   The host mints and refreshes tokens; the proxy substitutes them per request.
   Never store a real token in the sandbox or in kit files.
-- `chatgpt-codex` must not be renamed to `openai`. `sbx secret set --command`
-  cannot combine with `--oauth`, so reusing `openai` would replace the built-in
-  Codex agent's OAuth registration and break plain `sbx run codex`.
+- `chatgpt-codex` must not be renamed to `openai`, and `claude-code` must not be
+  renamed to `anthropic`. `sbx secret set --command` cannot combine with
+  `--oauth`, so reusing a built-in service id would replace that agent's OAuth
+  registration and break plain `sbx run codex` / `sbx run claude`.
 - `apiKey.inject` overwrites whatever the named header contains, so a consumer
-  only has to emit the header. Pi does that through `sbx-codex.ts`; the native
-  Codex CLI through the `sandboxd` model provider in `~/.codex/config.toml`.
-  Do not delete either: without them no header is sent and there is nothing for
+  only has to emit the header, and one rule per domain serves every consumer on
+  it. Pi emits through `sbx-codex.ts` and `sbx-anthropic.ts`; the native Codex
+  CLI through the `sandboxd` model provider in `~/.codex/config.toml`. Do not
+  delete any of them: without them no header is sent and there is nothing for
   the proxy to substitute.
 - Never seed `apiKeyHelper` into `~/.claude/settings.json`. It only works with
   provenance-backed OAuth interception; here it would make Claude Code send a
   dead sentinel and never prompt. `SBX_CRED_ANTHROPIC_MODE` is not a usable
   gate either — it reports `apikey` for an OAuth-only declaration.
-- Pi's Anthropic provider is intentionally not wired up. It is outside the
-  `--models` picker scope, and third-party harness usage bills per token from
-  Anthropic extra usage rather than against the plan, so the subscription only
-  pays off through the native `claude` CLI.
+- Pi's Anthropic provider is wired up through `sbx-anthropic.ts` and `anthropic/*`
+  is in the `--models` picker scope. The sentinel it registers must keep the
+  `sk-ant-oat` substring: Pi selects Bearer auth, the Claude Code identity
+  headers and system prompt, and Claude Code tool naming from that shape alone,
+  and any other key shape is sent as `x-api-key`, which the proxy never rewrites.
+- Anthropic usage through the `claude-code` credential is usage-based. Pi's
+  `anthropic/*` models and the native `claude` CLI share the same host-minted
+  bearer token and proxy injection rule, so neither can have a different billing
+  mode within this kit.
 - Every credential a third-party v2 kit declares needs a user-approved binding.
   Adding a credential or a new inject domain means a new first-run prompt.
 

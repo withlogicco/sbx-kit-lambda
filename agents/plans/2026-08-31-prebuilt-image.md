@@ -79,27 +79,13 @@ time. Also record the Claude Code credential-source options.
 
 ## Claude Code credential source
 
-`sbx secret set claude-code --command 'pi auth print-bearer-token --provider
-anthropic'` works mechanically but is the wrong token. Pi's Anthropic login is
-a third-party harness OAuth client, and Pi's own `providers.md` states that
-such usage "draws from extra usage and is billed per token, not against Claude
-plan limits". `claude setup-token` mints a first-party Claude Code token, and
-the smoke test confirmed it draws on the plan (`isUsingOverage: false`). Keep
-`setup-token`.
-
-The real gap is that `setup-token` does not auto-refresh. A first-party
-alternative that does:
-
-```
-sbx secret set claude-code --refresh on-demand \
-  --command "security find-generic-password -s 'Claude Code-credentials' -w \
-    | jq -r .claudeAiOauth.accessToken"
-```
-
-Unverified, with two risks: the host Keychain token is only refreshed when host
-Claude Code runs, so it can go stale; and `security` may hit a Keychain ACL
-prompt when the sbx daemon replays the command rather than an interactive
-shell, which would hang the resolve.
+**Superseded by [the usage-based Anthropic authentication plan](2026-09-02-usage-based-anthropic-auth.md).**
+The `claude setup-token` conclusion applied to the earlier native-Claude smoke
+test (`isUsingOverage: false`) but not to the current shared credential design.
+The kit now mints `claude-code` with `pi auth print-bearer-token --provider
+anthropic` and injects that one bearer into both Pi and native Claude requests;
+Anthropic use through this credential is usage-based. The proposed Keychain
+command is not used.
 
 ## Verification
 
