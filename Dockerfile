@@ -24,8 +24,10 @@ ENV HOME=/home/agent
 
 # The same script the kit runs from setup.install, so tool installation has a
 # single source of truth. COPYing only this path means unrelated kit edits do
-# not bust the build cache.
-COPY files/home/.lambda/install-tools.sh /tmp/install-tools.sh
+# not bust the build cache. COPY writes as root:root by default, and /tmp is
+# sticky, so the agent user could not remove the file afterwards without the
+# explicit ownership; --chmod pins the exec bit regardless of the source mode.
+COPY --chown=1000:1000 --chmod=0755 files/home/.lambda/install-tools.sh /tmp/install-tools.sh
 RUN sh /tmp/install-tools.sh \
     && rm -f /tmp/install-tools.sh \
     && rm -rf "$HOME/.npm"

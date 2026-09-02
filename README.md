@@ -142,10 +142,15 @@ lambda() {
   local image="ghcr.io/withlogicco/sbx-kit-lambda:latest"
 
   # Only needed until CI publishes the image; see "Prebuilt image" below.
-  # Requires a local clone, since the build needs the Dockerfile.
+  # Requires a local clone, since the build needs the Dockerfile. The save/load
+  # step is not optional: the sandbox runtime has its own image store and never
+  # reads the host daemon's.
   if [[ "${1:-}" == "--build" ]]; then
     shift
     docker build -t "$image" /path/to/sbx-kit-lambda || return 1
+    docker save "$image" -o "${TMPDIR:-/tmp}/lambda-image.tar" || return 1
+    sbx template load "${TMPDIR:-/tmp}/lambda-image.tar" || return 1
+    rm -f "${TMPDIR:-/tmp}/lambda-image.tar"
   fi
 
   if [[ "${1:-}" == "--reset" ]] && sbx ls --quiet | grep -Fxq -- "$name"; then
@@ -230,18 +235,26 @@ instead, and `sandbox.image` points at the resulting image.
 `ghcr.io/withlogicco/sbx-kit-lambda` on pushes to `main`, on tags, weekly, and
 on manual dispatch. The image is public, so no registry credential is needed.
 
-**Until that tag is published, build it locally.** sbx resolves `sandbox.image`
-from the local Docker image store first, so a local build satisfies it and no
-spec change is needed once CI takes over:
+**Until that tag is published, build it locally — and hand the result to the
+sandbox runtime.** The runtime keeps its own image store (`sbx template ls`)
+and does not fall back to the host Docker daemon's, so an image that only
+exists on the host still fails creation with `403 Forbidden: pull failed for
+image ...`. Building is therefore two steps, not one:
 
 ```bash
 docker build -t ghcr.io/withlogicco/sbx-kit-lambda:latest .
+docker save ghcr.io/withlogicco/sbx-kit-lambda:latest -o /tmp/lambda-image.tar
+sbx template load /tmp/lambda-image.tar
 ```
 
-The `lambda --build` helper above does this for you. Rebuild after changing the
-`Dockerfile` or `install-tools.sh`. Note that a local build masquerades as the
-GHCR tag, so `docker image inspect` is the only way to tell whether you are
-running a local build or the published one.
+Once the tag is in that store, sbx uses it instead of pulling, so no spec change
+is needed once CI takes over.
+
+The `lambda --build` helper above does all of this for you. Rebuild after
+changing the `Dockerfile` or `install-tools.sh` — and re-load, since the runtime
+keeps serving the previously loaded layers otherwise. Note that a local build
+masquerades as the GHCR tag, so `sbx template ls` (image ID and age) is the only
+way to tell whether you are running a local build or the published one.
 
 `spec.yaml` also declares `sandbox.build` pointing at the `Dockerfile`, so the
 image's origin is discoverable from the spec. sbx does not act on it yet and

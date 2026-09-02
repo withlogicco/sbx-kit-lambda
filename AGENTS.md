@@ -34,9 +34,11 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
   Expect one notice on every `sbx kit validate` / `sbx kit inspect` saying the
   image is taken from `sandbox.image`; that is not a regression. Declaring
   `build` without `image` fails validation outright, so `image` must always be
-  set. The image is built by `.github/workflows/image.yml`, or locally with
-  `docker build -t ghcr.io/withlogicco/sbx-kit-lambda:latest .` until CI
-  publishes the tag.
+  set. The image is built by `.github/workflows/image.yml`, or locally until CI
+  publishes the tag — and a local `docker build` alone is not enough: the
+  sandbox runtime has its own image store, so the build must be handed over
+  with `docker save ... -o file.tar` followed by `sbx template load file.tar`,
+  or creation fails with `403 Forbidden: pull failed`.
 - Native subagents must be invoked as `codex` and `claude`. Never shell out to
   `lambda` or `pi` from the subagent extension.
 - Never start a native subagent proactively. The current user must clearly ask
