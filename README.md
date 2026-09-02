@@ -92,9 +92,9 @@ pay-per-token account. The host-minted-token approach above avoids a
 per-sandbox browser login. Anthropic calls using the shared `claude-code`
 credential are usage-based.
 
-If you would rather log in inside the sandbox, that still works and persists in
-the `~/.claude` and `~/.codex` volumes — but only for that one sandbox, and the
-real token then lives in the VM.
+If you log in inside the sandbox instead, that authentication lasts only until
+sandbox recreation. Credentials are deliberately outside the narrowly scoped
+session volumes; host-managed authentication is the persistent path.
 
 Global credentials are applied when a sandbox is created. Recreate an existing
 sandbox after adding or changing one.
@@ -210,14 +210,20 @@ Volumes survive sandbox recreation:
 | Path | Contents |
 | ---- | -------- |
 | `/home/agent/.pi/agent/sessions` | Pi session history |
-| `/home/agent/.claude` | Claude Code credentials, settings, and session state |
-| `/home/agent/.codex` | Codex CLI state |
+| `/home/agent/.claude/projects` | Claude Code transcripts used by `--resume` and `--continue`, plus co-located project memory |
+| `/home/agent/.codex/sessions` | Codex rollout transcripts used by `codex resume` |
+
+The volume roots are limited to resumable conversations. Claude also stores its
+auto-memory below `projects`, so that state is unavoidably included in the same
+volume. CLI credentials, settings, caches, prompt history, plugins, MCP
+configuration, and Claude's file checkpoints are not needed for resume and are
+intentionally discarded on recreation. The kit recreates the required Codex
+and Claude settings during setup, while authentication is host-managed.
 
 `~/.pi/agent` as a whole is deliberately not persisted: the kit ships
 `models.json` and its extensions into that directory, and a volume there would
 shadow kit-owned files across kit updates. Pi's `auth.json` therefore does not
-survive recreation, which does not matter because auth is host-managed rather
-than stored in the sandbox.
+survive recreation for the same reason.
 
 Volumes are keyed to the sandbox name, so they are never shared between
 sandboxes. That is why credentials are resolved from the host secret store

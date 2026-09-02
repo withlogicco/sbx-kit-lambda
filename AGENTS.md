@@ -83,7 +83,12 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
 
 ## Volumes
 
-- Persist `~/.pi/agent/sessions`, `~/.claude`, and `~/.codex`.
+- Persist only the narrowest resumable conversation stores:
+  `~/.pi/agent/sessions`, `~/.claude/projects`, and `~/.codex/sessions`.
+  Claude's project memory is co-located under `projects` and is therefore also
+  retained. Do not persist either native CLI's whole state directory; setup
+  recreates required configuration and credentials belong in the host secret
+  store.
 - Never mount a volume over `~/.pi/agent` itself: the kit ships `models.json`
   and its extensions there, and a volume would shadow kit-owned files across
   kit updates.
