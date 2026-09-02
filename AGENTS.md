@@ -2,18 +2,70 @@
 
 ## Overview
 
-This repository defines the `lambda` Docker SBX kit. It installs Pi behind the
-`codex` command and preserves native agent CLIs under `sbx-*` names.
+This repository defines the `lambda` Docker SBX **agent kit** (`kind: sandbox`,
+`schemaVersion: "2"`). It builds on `docker/sandbox-templates:shell-docker`,
+installs Pi, and exposes it as the `lambda` agent binary. Because Lambda is its
+own agent, `codex` and `claude` remain the real upstream CLIs.
 
 ## Development
 
-- Validate kit changes with `sbx kit validate .`.
+- Validate kit changes with `sbx kit validate .` and review the resolved shape
+  with `sbx kit inspect .`.
 - Keep `README.md` aligned with `spec.yaml` installation, authentication, and
   command behavior.
-- Keep Pi extensions self-contained TypeScript modules that Pi can load via
-  `~/.pi/agent/extensions/`.
-- Native subagents must be invoked through `sbx-codex` and `sbx-claude` by
-  default; never invoke `codex` from the extension because it launches Pi.
+- Keep Pi extensions self-contained TypeScript modules that Pi auto-discovers
+  from `~/.pi/agent/extensions/`.
+- Indent with spaces, never tabs. `.editorconfig` is authoritative: two spaces
+  for TypeScript, JavaScript, JSON, and YAML.
+- Install supported standalone CLI tools with Webi; use an upstream installer
+  or package manager only when Webi does not provide the tool. Pi, Codex, and
+  Claude Code are the documented exceptions.
+- `npm install -g` runs as the agent user (UID 1000): the base image ships an
+  agent-owned `/usr/local/share/npm-global` that is already on `PATH`.
+- Native subagents must be invoked as `codex` and `claude`. Never shell out to
+  `lambda` or `pi` from the subagent extension.
+- Never start a native subagent proactively. The current user must clearly ask
+  to run or delegate to Codex, Claude, or a native subagent.
+- Once the user has clearly requested delegation, `run_subagent` must execute
+  without a second authorization heuristic; responsibility stays with the
+  calling model, and the native agent must not ask for permission.
+
+## Authentication
+
+- Proxy-managed OAuth does not activate for this kit. Docker gates OAuth
+  interception on built-in provenance, which a third-party sandbox kit cannot
+  have. Verified: the proxy never substitutes the OAuth sentinel.
+- API-key injection does work, so host-managed auth is rebuilt on top of it.
+  The host mints and refreshes tokens; the proxy substitutes them per request.
+  Never store a real token in the sandbox or in kit files.
+- `chatgpt-codex` must not be renamed to `openai`. `sbx secret set --command`
+  cannot combine with `--oauth`, so reusing `openai` would replace the built-in
+  Codex agent's OAuth registration and break plain `sbx run codex`.
+- `apiKey.inject` overwrites whatever the named header contains, so a consumer
+  only has to emit the header. Pi does that through `sbx-codex.ts`; the native
+  Codex CLI through the `sandboxd` model provider in `~/.codex/config.toml`.
+  Do not delete either: without them no header is sent and there is nothing for
+  the proxy to substitute.
+- Never seed `apiKeyHelper` into `~/.claude/settings.json`. It only works with
+  provenance-backed OAuth interception; here it would make Claude Code send a
+  dead sentinel and never prompt. `SBX_CRED_ANTHROPIC_MODE` is not a usable
+  gate either — it reports `apikey` for an OAuth-only declaration.
+- Pi's Anthropic provider is intentionally not wired up. It is outside the
+  `--models` picker scope, and third-party harness usage bills per token from
+  Anthropic extra usage rather than against the plan, so the subscription only
+  pays off through the native `claude` CLI.
+- Every credential a third-party v2 kit declares needs a user-approved binding.
+  Adding a credential or a new inject domain means a new first-run prompt.
+
+## Volumes
+
+- Persist `~/.pi/agent/sessions`, `~/.claude`, and `~/.codex`.
+- Never mount a volume over `~/.pi/agent` itself: the kit ships `models.json`
+  and its extensions there, and a volume would shadow kit-owned files across
+  kit updates.
+- Volumes are keyed to the sandbox name and cannot be shared between sandboxes.
+  Never treat a volume as a place to keep credentials; that would force a login
+  per project. Credentials belong in the host secret store.
 
 ## Subagents
 
@@ -22,8 +74,11 @@ This repository defines the `lambda` Docker SBX kit. It installs Pi behind the
   their non-interactive permission-bypass options.
 - Plan/review work may run concurrently; code work against a shared workspace
   must be serialized.
-- Codex uses `gpt-5.6-sol` and Claude uses `fable` for plan/review; coding
-  defaults to Codex `gpt-5.6-terra` and Claude `opus` (override per role with
-  `LAMBDA_<BACKEND>_<ROLE>_MODEL`, for example `LAMBDA_CLAUDE_CODE_MODEL=sonnet`).
-- If Claude authentication is unavailable, tell the user to run
-  `!sbx-claude auth login`.
+- Every role defaults to Codex `sol` (`gpt-5.6-sol`, high) and Claude `opus`
+  (Claude Opus 5, high). Codex alternatives are `terra` (`gpt-5.6-terra`,
+  ultra) and `luna` (`gpt-5.6-luna`, high); Claude also supports `sonnet`
+  (Claude Sonnet 5, high). Override a role with
+  `LAMBDA_<BACKEND>_<ROLE>_MODEL` and `LAMBDA_<BACKEND>_<ROLE>_EFFORT`, or the
+  binary with `LAMBDA_<BACKEND>_EXECUTABLE`.
+- If Claude authentication is unavailable, tell the user to run `!claude` and
+  complete `/login` inside the sandbox.
