@@ -12,12 +12,18 @@ sandbox:
   # contract (agent user at UID 1000, passwordless sudo, /home/agent owned by
   # agent, proxy env preserved across sudo) and ships Docker in the sandbox.
   #
-  # Until .github/workflows/image.yml has published this tag, build it locally:
+  # Until .github/workflows/image.yml has published this tag, build it locally.
+  # The sandbox runtime keeps its OWN image store (`sbx template ls`), separate
+  # from the host Docker daemon, and it never falls back to the host store: an
+  # image only `docker build`-ed on the host still fails creation with
+  # `403 Forbidden: pull failed`. So the build has to be handed over explicitly:
   #
   #   docker build -t ghcr.io/withlogicco/sbx-kit-lambda:latest .
+  #   docker save ghcr.io/withlogicco/sbx-kit-lambda:latest -o /tmp/lambda.tar
+  #   sbx template load /tmp/lambda.tar
   #
-  # sbx resolves the tag from the local image store first, so a local build
-  # satisfies it and no spec change is needed when CI starts publishing.
+  # Once the tag is in the sandbox runtime's store, sbx uses it instead of
+  # pulling, so no spec change is needed when CI starts publishing.
   # `setup.install` still runs install-tools.sh, which no-ops when the image
   # already has the tools, so the kit also works on a plain shell-docker base.
   image: "ghcr.io/withlogicco/sbx-kit-lambda:latest"

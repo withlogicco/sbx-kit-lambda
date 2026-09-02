@@ -53,17 +53,13 @@ time. Also record the Claude Code credential-source options.
   `setup.install` runs it, so there is no second list of installs to keep in
   sync. Static files under `files/home/` land before install commands, which is
   what makes this work.
-- **`sandbox.image` uses the final GHCR tag from the start, built locally until
-  CI publishes it.** sbx resolves the tag from the local Docker image store
-  first, so a local `docker build -t ghcr.io/withlogicco/sbx-kit-lambda:latest .`
-  satisfies it and nothing needs changing when CI takes over. The cost is that a
-  local build masquerades as the published tag, so `docker image inspect` is the
-  only way to tell them apart. The `lambda` shell helper builds on demand and
-  takes a `--build` flag to force a rebuild.
-  **Unverified:** that sbx prefers a local image over pulling. The Docker daemon
-  was down while this was written, so it could not be tested. If sbx always
-  pulls, point `image` back at `docker/sandbox-templates:shell-docker` until CI
-  publishes the tag — the guarded script makes that a one-line change.
+- **`sandbox.image` uses the final GHCR tag from the start.** The sandbox
+  runtime keeps its own image store and never reads the host Docker daemon, so a
+  local build must be handed over with `docker save` followed by `sbx template
+  load` before it satisfies the tag. `sbx template ls`, rather than `docker
+  image inspect`, shows which image the runtime can use. The `lambda` shell
+  helper builds, saves, and loads the image on demand with `--build`; CI
+  publishing requires no spec change.
 - **Public image on GHCR.** Avoids every user needing
   `sbx secret set --registry ghcr.io` before the kit can pull.
 - **Floating tool versions, rebuilt weekly.** Pins would be reproducible but
@@ -117,8 +113,10 @@ shell, which would hang the resolve.
 `sandbox.image` names a tag that does not exist in GHCR until the workflow runs.
 Two ways to get there:
 
-- Build locally: `docker build -t ghcr.io/withlogicco/sbx-kit-lambda:latest .`,
-  or just run the `lambda` helper, which builds when the image is missing.
+- Build and hand over locally: `docker build -t
+  ghcr.io/withlogicco/sbx-kit-lambda:latest .`, then `docker save` the tag and
+  `sbx template load` the tarball, or just run the `lambda` helper, which does
+  all three steps when invoked with `--build`.
 - Publish from a branch with the workflow's `workflow_dispatch` trigger.
 
 Either way, confirm with a smoke sandbox that creation no longer spends time on
