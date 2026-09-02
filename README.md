@@ -38,9 +38,10 @@ sbx secret set chatgpt-codex \
   --command 'pi auth print-bearer-token --provider openai-codex' \
   --refresh on-demand
 
-# Claude subscription: generate a long-lived token, then store it
-claude setup-token
-sbx secret set claude-code --token
+# Claude usage-based access, minted fresh on every request by Pi on the host
+sbx secret set claude-code \
+  --command 'pi auth print-bearer-token --provider anthropic' \
+  --refresh on-demand
 
 # OpenCode Go, and GitHub for gh and git over HTTPS
 sbx secret set opencode-go
@@ -58,13 +59,24 @@ for each service and the domains it may inject into. Approvals live in
 | -------- | ----- | ------------------ | ---------- |
 | Pi (`lambda`) | Authorization header via `sbx-codex.ts` | `chatgpt.com` | `chatgpt-codex` |
 | Native `codex` | Authorization header via the `sandboxd` model provider in `~/.codex/config.toml` | `chatgpt.com` | `chatgpt-codex` |
-| Native `claude` | Authorization bearer from `CLAUDE_CODE_OAUTH_TOKEN` | `api.anthropic.com` | `claude-code` |
+| Native `claude` | Authorization bearer from `CLAUDE_CODE_OAUTH_TOKEN` | `api.anthropic.com` | `claude-code` (usage-based) |
+| Pi's `anthropic/*` models | Authorization header via `sbx-anthropic.ts` | `api.anthropic.com` | `claude-code` (usage-based) |
 | Pi's OpenCode Go provider | `OPENCODE_API_KEY` | `opencode.ai` | `opencode-go` |
 | `gh`, `git` | `GH_TOKEN` | `api.github.com`, `github.com`, `raw.githubusercontent.com` | `github` |
 
-Both ChatGPT consumers only need to *emit* an `Authorization` header —
-`apiKey.inject` overwrites whatever it contains, so the placeholder values in
-`sbx-codex.ts` and `config.toml` are not secrets and are never sent upstream.
+Consumers only need to *emit* an `Authorization` header — `apiKey.inject`
+overwrites whatever it contains, so the placeholder values in `sbx-codex.ts`,
+`sbx-anthropic.ts`, and `config.toml` are not secrets and are never sent
+upstream. One injection rule serves every consumer on a domain, which is why
+Pi's Claude models and the native `claude` CLI share the `claude-code`
+credential, so both use the same usage-based billing mode.
+
+Pi picks its Anthropic auth mode from the *shape* of the key: only one
+containing `sk-ant-oat` takes the OAuth path that sends `Authorization: Bearer`
+(along with the Claude Code identity headers, system prompt, and tool naming
+Anthropic expects from such a token). Anything else is sent as `x-api-key`,
+which the proxy does not rewrite. `sbx-anthropic.ts` exists to satisfy that
+check — its sentinel is shaped like an OAuth token and is otherwise meaningless.
 
 > [!NOTE]
 > The `chatgpt-codex` service is deliberately not named `openai`. `sbx secret
@@ -76,8 +88,9 @@ Both ChatGPT consumers only need to *emit* an `Authorization` header —
 
 Neither subscription can be used with an API key: ChatGPT Plus/Pro and Claude
 Pro/Max are OAuth-only, and an OpenAI or Anthropic API key is a separate,
-pay-per-token account. The host-minted-token approach above is what keeps the
-subscription in play without a per-sandbox browser login.
+pay-per-token account. The host-minted-token approach above avoids a
+per-sandbox browser login. Anthropic calls using the shared `claude-code`
+credential are usage-based.
 
 If you would rather log in inside the sandbox, that still works and persists in
 the `~/.claude` and `~/.codex` volumes — but only for that one sandbox, and the
@@ -128,7 +141,10 @@ Override any role with `LAMBDA_<BACKEND>_<ROLE>_MODEL` and
 
 Pi starts on `openai-codex/gpt-5.6-sol` with high thinking. Its model picker is
 scoped to Sol (high), Terra (`max` in Pi, mapped to upstream `ultra` by
-`files/home/.pi/agent/models.json`), Luna (high), and OpenCode Go models.
+`files/home/.pi/agent/models.json`), Luna (high), OpenCode Go models, and the
+Anthropic catalog (`anthropic/*` — Opus 5, Sonnet 5, Fable 5, Haiku 4.5, and the
+4.x line). The Claude models need the usage-based `claude-code` credential;
+without it they appear in the picker but fail to authenticate.
 
 ## Run
 
