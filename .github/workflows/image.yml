@@ -5,7 +5,9 @@ on:
     branches: [main]
     tags: ["v*"]
     paths:
+      - .dockerignore
       - Dockerfile
+      - files/home/.lambda/install-tools.sh
       - .github/workflows/image.yml
   # Tool versions float, so rebuild weekly to pick up new Pi, Codex, and
   # Claude Code releases without a commit.
@@ -58,6 +60,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Scheduled builds exist to refresh floating tool versions, which are
+          # invisible to BuildKit's cache keys. Force those builds to rerun the
+          # installer instead of restoring its layer from the GHA cache.
+          no-cache: ${{ github.event_name == 'schedule' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

@@ -25,9 +25,10 @@ time. Also record the Claude Code credential-source options.
 3. Replace the four tool-install commands in `setup.install` with a single call
    to the script.
 4. Add `.github/workflows/image.yml` to build `linux/amd64` and `linux/arm64`
-   and push to `ghcr.io/withlogicco/sbx-kit-lambda` on pushes to `main`, on
-   tags, weekly, and on manual dispatch. Verify the agent-image contract and
-   every expected binary against the pushed digest.
+   and push to `ghcr.io/withlogicco/sbx-kit-lambda` on relevant pushes to
+   `main`, on tags, weekly, and on manual dispatch. Scheduled builds bypass the
+   layer cache so floating upstream versions are actually refreshed. Verify the
+   agent-image contract and every expected binary against the pushed digest.
 5. Point `sandbox.image` at `ghcr.io/withlogicco/sbx-kit-lambda:latest` and
    declare `sandbox.build` alongside it, and build that tag locally from the
    `lambda` shell helper until CI publishes it.
@@ -62,9 +63,15 @@ time. Also record the Claude Code credential-source options.
   publishing requires no spec change.
 - **Public image on GHCR.** Avoids every user needing
   `sbx secret set --registry ghcr.io` before the kit can pull.
-- **Floating tool versions, rebuilt weekly.** Pins would be reproducible but
-  need constant bumping; the weekly rebuild plus the guarded `setup.install`
-  fallback covers staleness. Revisit if a bad upstream release ever ships.
+- **Floating tool versions, rebuilt weekly without cached layers.** Pins would
+  be reproducible but need constant bumping. Scheduled workflow runs set
+  `no-cache`, because upstream releases are not BuildKit cache-key inputs;
+  push, tag, and manual builds retain the GHA cache. The guarded
+  `setup.install` fallback covers staleness. Revisit if a bad upstream release
+  ever ships.
+- **Build-trigger paths cover every effective context input.** Changes to the
+  Dockerfile, `.dockerignore`, shared installer, or workflow trigger a build on
+  `main`; unrelated kit edits do not publish an identical image.
 - **`setup.install` keeps calling the script even once the image is prebuilt.**
   It no-ops against an image that already has the tools, and it keeps the kit
   usable against a plain `shell-docker` base or if a pull fails.
