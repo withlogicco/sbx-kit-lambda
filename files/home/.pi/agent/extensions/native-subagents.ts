@@ -8,7 +8,7 @@ import { Type } from "typebox";
 
 const MAX_OUTPUT_BYTES = 50 * 1024;
 const roles = ["plan", "review", "code"] as const;
-const modelAliases = ["sol", "terra", "luna", "opus", "sonnet"] as const;
+const modelAliases = ["astra", "luna", "sol", "opus", "sonnet"] as const;
 type Role = (typeof roles)[number];
 type Backend = "codex" | "claude";
 type ModelAlias = (typeof modelAliases)[number];
@@ -52,9 +52,9 @@ async function executableFor(backend: Backend): Promise<string> {
 
 const modelSelections: Record<Backend, Partial<Record<ModelAlias, ModelSelection>>> = {
   codex: {
-    sol: { alias: "sol", model: "gpt-5.6-sol", effort: "high" },
-    terra: { alias: "terra", model: "gpt-5.6-terra", effort: "ultra" },
-    luna: { alias: "luna", model: "gpt-5.6-luna", effort: "high" },
+    astra: { alias: "astra", model: "gpt-6-astra", effort: "high" },
+    luna: { alias: "luna", model: "gpt-6-luna", effort: "high" },
+    sol: { alias: "sol", model: "gpt-6-sol", effort: "high" },
   },
   claude: {
     opus: { alias: "opus", model: "opus", effort: "high" },
@@ -260,7 +260,7 @@ const parameters = Type.Object({
   role: StringEnum(roles, { description: "plan and review are read-only; code may modify the workspace" }),
   task: Type.String({ description: "Focused task for the native subagent" }),
   model: Type.Optional(StringEnum(modelAliases, {
-    description: "Model alias. Codex: sol (default), terra, luna. Claude: opus (default), sonnet.",
+    description: "Model alias. Codex: sol (default), astra, luna. Claude: opus (default), sonnet.",
   })),
 });
 
@@ -289,13 +289,13 @@ export default function (pi: ExtensionAPI) {
     prepareArguments(args) {
       if (!args || typeof args !== "object") return args;
       const input = args as { model?: unknown };
-      const legacyAliases: Record<string, ModelAlias> = {
-        "gpt-5.6-sol": "sol",
-        "gpt-5.6-terra": "terra",
-        "gpt-5.6-luna": "luna",
+      const modelAliasesById: Record<string, ModelAlias> = {
+        "gpt-6-astra": "astra",
+        "gpt-6-luna": "luna",
+        "gpt-6-sol": "sol",
       };
-      return typeof input.model === "string" && legacyAliases[input.model]
-        ? { ...input, model: legacyAliases[input.model] }
+      return typeof input.model === "string" && modelAliasesById[input.model]
+        ? { ...input, model: modelAliasesById[input.model] }
         : args;
     },
     async execute(_id, params, signal, onUpdate, ctx) {

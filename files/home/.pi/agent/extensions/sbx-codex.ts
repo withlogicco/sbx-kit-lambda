@@ -17,8 +17,16 @@ export default function configureSbxCodex(pi: ExtensionAPI): void {
     apiKey: PI_CODEX_SENTINEL,
   });
   pi.on("before_provider_headers", (event) => {
-    if (event.headers.Authorization === `Bearer ${PI_CODEX_SENTINEL}`) {
-      event.headers.Authorization = `Bearer ${SBX_CODEX_SENTINEL}`;
+    // Pi normalizes Headers entries to lowercase before dispatching this hook.
+    // Match case-insensitively so this keeps working across Pi versions.
+    const authorizationHeader = Object.keys(event.headers).find(
+      (name) => name.toLowerCase() === "authorization",
+    );
+    if (
+      authorizationHeader &&
+      event.headers[authorizationHeader] === `Bearer ${PI_CODEX_SENTINEL}`
+    ) {
+      event.headers[authorizationHeader] = `Bearer ${SBX_CODEX_SENTINEL}`;
     }
   });
 }
