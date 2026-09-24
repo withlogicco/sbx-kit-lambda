@@ -103,9 +103,9 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
   their non-interactive permission-bypass options.
 - Plan/review work may run concurrently; code work against a shared workspace
   must be serialized.
-- Every role defaults to Codex `sol` (`gpt-5.6-sol`, high) and Claude `opus`
-  (Claude Opus 5, high). Codex alternatives are `terra` (`gpt-5.6-terra`,
-  ultra) and `luna` (`gpt-5.6-luna`, high); Claude also supports `sonnet`
+- Every role defaults to Codex `sol` (`gpt-6-sol`, high) and Claude `opus`
+  (Claude Opus 5, high). Codex alternatives are `astra` (`gpt-6-astra`, high)
+  and `luna` (`gpt-6-luna`, high); Claude also supports `sonnet`
   (Claude Sonnet 5, high). Override a role with
   `LAMBDA_<BACKEND>_<ROLE>_MODEL` and `LAMBDA_<BACKEND>_<ROLE>_EFFORT`, or the
   binary with `LAMBDA_<BACKEND>_EXECUTABLE`.

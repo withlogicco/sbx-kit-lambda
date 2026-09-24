@@ -121,16 +121,16 @@ reject the model's interpretation of that request; the delegated agent proceeds
 without asking for another approval. `/codex` and `/claude` are themselves
 explicit requests.
 
-All roles default to `sol` (`gpt-5.6-sol`, high) for Codex and `opus` (Claude
+All roles default to `sol` (`gpt-6-sol`, high) for Codex and `opus` (Claude
 Opus 5, high) for Claude. Available aliases are:
 
-- Codex: `sol` (high), `terra` (ultra), and `luna` (high)
+- Codex: `astra` (high), `luna` (high), and `sol` (high)
 - Claude: `opus` (high) and `sonnet` (Claude Sonnet 5, high)
 
 Choose an alias after the role, for example:
 
 ```text
-/codex code terra implement the approved plan
+/codex code astra implement the approved plan
 /claude review sonnet review the current tree
 ```
 
@@ -139,12 +139,13 @@ Override any role with `LAMBDA_<BACKEND>_<ROLE>_MODEL` and
 `LAMBDA_CLAUDE_EXECUTABLE` override which binary is invoked. The
 `run_subagent` tool accepts the same optional model aliases.
 
-Pi starts on `openai-codex/gpt-5.6-sol` with high thinking. Its model picker is
-scoped to Sol (high), Terra (`max` in Pi, mapped to upstream `ultra` by
-`files/home/.pi/agent/models.json`), Luna (high), OpenCode Go models, and the
-Anthropic catalog (`anthropic/*` — Opus 5, Sonnet 5, Fable 5, Haiku 4.5, and the
-4.x line). The Claude models need the usage-based `claude-code` credential;
-without it they appear in the picker but fail to authenticate.
+Pi starts on `openai-codex/gpt-6-sol` with high thinking. Its model picker is
+scoped to Astra, Luna, and Sol from the GPT-6 Codex family; OpenCode Go's
+GPT-5.6 Luna, Kimi K3, GLM 5.3 and 5.3 Flash, DeepSeek V4.1 Flash and V4 Pro,
+and Qwen 3.8 Flash and Max; and Anthropic's Claude Opus 5.5, Fable 5.1, and
+Sonnet 5. GPT-6 models are available only through Codex, not OpenCode Go.
+The Claude models need the usage-based `claude-code` credential; without it
+they appear in the picker but fail to authenticate.
 
 ## Run
 
