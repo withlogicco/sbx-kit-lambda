@@ -12,15 +12,21 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
  *
  * When one is detected, the wait until reset is parsed from the error message
  * (falling back to a 429 `retry-after` header, then to provider defaults), a
- * countdown widget is shown, and the session is automatically restarted when
- * the limit resets. The user can press ESC at any time to cancel the scheduled
- * restart and keep using the session.
+ * countdown widget is shown, and the conversation is automatically resumed in
+ * place when the limit resets. The user can press ESC at any time to cancel the
+ * scheduled resume and keep using the session.
+ *
+ * `/retry <duration>` (e.g. `/retry 10s`) schedules a simulated wait so the
+ * countdown and resume path can be exercised without hitting a real limit.
  */
 
 type Provider = "opencode-go" | "codex";
 
+/** Real providers plus the `/retry` debug source. */
+type WaitSource = Provider | "debug";
+
 interface PendingRestart {
-  provider: Provider;
+  provider: WaitSource;
   resetAt: number;
   timer: NodeJS.Timeout;
   ticker: NodeJS.Timeout;
@@ -33,7 +39,7 @@ const DEFAULT_RESET_SECONDS: Record<Provider, number> = {
   codex: 60 * 60,
 };
 
-const pendingRestarts = new Map<Provider, PendingRestart>();
+const pendingRestarts = new Map<WaitSource, PendingRestart>();
 
 // Private consumer usage endpoints. They sit behind the same credentials as
 // the completion APIs, so in sandboxes the proxy injects the real token over
@@ -152,16 +158,26 @@ export function parseRateLimit(
   return { provider, resetSeconds: resetSeconds ?? DEFAULT_RESET_SECONDS[provider] };
 }
 
-/** Detach a fresh session from the terminal and stop the rate-limited one. */
-function restartSession(): void {
-  const child = spawn("lambda", [], {
-    stdio: "inherit",
-    detached: true,
-    env: process.env,
-  });
-  child.unref();
-  process.exit(0);
+/**
+ * Parse `/retry` durations: `90`, `10s`, `5m`, `1h`, or compounds like `1m30s`.
+ * A bare number is seconds. Returns null for anything else.
+ */
+export function parseDuration(input: string): number | null {
+  const text = input.trim().toLowerCase();
+  if (/^\d+$/.test(text)) return parseInt(text, 10);
+  const pattern = /(\d+)\s*(h|m|s)/g;
+  let total = 0;
+  let consumed = "";
+  for (const match of text.matchAll(pattern)) {
+    const value = parseInt(match[1]!, 10);
+    total += match[2] === "h" ? value * 3600 : match[2] === "m" ? value * 60 : value;
+    consumed += match[0];
+  }
+  return consumed.length > 0 && consumed.replace(/\s/g, "") === text.replace(/\s/g, "") ? total : null;
 }
+
+const RESUME_PROMPT =
+  "The usage limit that interrupted the previous turn has reset. Continue where you left off.";
 
 interface CodexAuth {
   accessToken?: string;
@@ -403,26 +419,40 @@ export default function configureRateLimitHandler(pi: ExtensionAPI): void {
     startCountdown(provider, resetMs, ctx);
   }
 
-  function startCountdown(provider: Provider, resetAt: number, ctx: ExtensionContext): void {
+  /**
+   * Resume in the running process. Restarting pi (spawning a detached child
+   * and exiting) cannot work: the sandbox exec session ends with the pi
+   * process, taking the terminal and the orphaned child down with it.
+   */
+  function resumeConversation(ctx: ExtensionContext): void {
+    pi.sendMessage(
+      { customType: "rate-limit-resume", content: RESUME_PROMPT, display: true, details: undefined },
+      // Never steer into a run the user started while waiting.
+      { triggerTurn: true, deliverAs: ctx.isIdle() ? undefined : "followUp" },
+    );
+  }
+
+  function startCountdown(provider: WaitSource, resetAt: number, ctx: ExtensionContext): void {
     const renderWidget = () => {
       const remaining = formatDuration((resetAt - Date.now()) / 1000);
       ctx.ui.setWidget(
         "rate-limit",
         [
-          `⏱️  ${provider} rate limited — restart in ${remaining}`,
-          "    Press ESC to cancel the automatic restart",
+          `⏱️  ${provider} rate limited — resuming in ${remaining}`,
+          "    Press ESC to cancel the automatic resume",
         ],
       );
     };
     renderWidget();
     const ticker = setInterval(renderWidget, 1000);
 
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
       pendingRestarts.delete(provider);
       clearInterval(ticker);
       ctx.ui.setWidget("rate-limit", undefined);
-      ctx.ui.notify(`${provider} rate limit reset — restarting session`, "info");
-      restartSession();
+      releaseEscapeListener();
+      ctx.ui.notify(`${provider} rate limit reset — resuming the conversation`, "info");
+      resumeConversation(ctx);
     }, Math.max(0, resetAt - Date.now()));
 
     pendingRestarts.set(provider, {
@@ -443,6 +473,7 @@ export default function configureRateLimitHandler(pi: ExtensionAPI): void {
     detachEscapeListener = ui.onTerminalInput((data) => {
       if (pendingRestarts.size > 0 && matchesKey(data, "escape")) {
         cancelAll();
+        ui.notify("Cancelled the automatic resume.", "info");
       }
       // Never consume: pi keeps its own ESC handling (e.g. aborting a run).
       return undefined;
@@ -455,7 +486,7 @@ export default function configureRateLimitHandler(pi: ExtensionAPI): void {
     detachEscapeListener = null;
   }
 
-  function cancel(provider: Provider, opts?: { ctx?: Notifier; silent?: boolean }): void {
+  function cancel(provider: WaitSource, opts?: { ctx?: Notifier; silent?: boolean }): void {
     const notify = !opts?.silent;
     const pending = pendingRestarts.get(provider);
     if (!pending) return;
@@ -463,12 +494,13 @@ export default function configureRateLimitHandler(pi: ExtensionAPI): void {
     clearInterval(pending.ticker);
     pending.clearWidget();
     pendingRestarts.delete(provider);
+    // A silent cancel that is immediately rescheduled re-attaches right away.
+    releaseEscapeListener();
     if (!notify) return;
     // An explicit cancel invalidates the cached usage answer: the next rate
     // limit should be looked up fresh.
-    lastUsageReset.delete(provider);
-    opts?.ctx?.ui.notify(`Cancelled the automatic restart for ${provider}.`, "info");
-    releaseEscapeListener();
+    if (provider !== "debug") lastUsageReset.delete(provider);
+    opts?.ctx?.ui.notify(`Cancelled the automatic resume for ${provider}.`, "info");
   }
 
   function cancelAll(): void {
@@ -483,16 +515,16 @@ export default function configureRateLimitHandler(pi: ExtensionAPI): void {
         return;
       }
       const items = [...pendingRestarts.values()].map(
-        (pending) => `${pending.provider}: restart in ${formatDuration((pending.resetAt - Date.now()) / 1000)}`,
+        (pending) => `${pending.provider}: resume in ${formatDuration((pending.resetAt - Date.now()) / 1000)}`,
       );
       ctx.ui.notify(`Rate limit waits:\n${items.join("\n")}`, "info");
     },
   });
 
   pi.registerCommand("cancel-wait", {
-    description: "/cancel-wait [provider] — Cancel a pending rate limit wait (restart)",
+    description: "/cancel-wait [provider] — Cancel a pending rate limit wait (resume)",
     handler: async (args, ctx) => {
-      const provider = args.trim().toLowerCase() as Provider | "";
+      const provider = args.trim().toLowerCase() as WaitSource | "";
       if (!provider) {
         const count = pendingRestarts.size;
         cancelAll();
@@ -504,6 +536,20 @@ export default function configureRateLimitHandler(pi: ExtensionAPI): void {
         return;
       }
       cancel(provider, { ctx });
+    },
+  });
+
+  pi.registerCommand("retry", {
+    description: "/retry <duration> — Simulate a rate limit wait (e.g. 10s, 2m, 1m30s) to test the countdown",
+    handler: async (args, ctx) => {
+      const seconds = parseDuration(args);
+      if (seconds === null || seconds <= 0) {
+        ctx.ui.notify("Usage: /retry <duration>, e.g. /retry 10s, /retry 2m, /retry 1m30s", "warning");
+        return;
+      }
+      // Bypass scheduleRestart: no earliest-wins merge and no usage lookup.
+      cancel("debug", { silent: true });
+      startCountdown("debug", Date.now() + seconds * 1000, ctx);
     },
   });
 }
