@@ -54,7 +54,7 @@ const modelSelections: Record<Backend, Partial<Record<ModelAlias, ModelSelection
   codex: {
     astra: { alias: "astra", model: "gpt-6-astra", effort: "high" },
     luna: { alias: "luna", model: "gpt-6-luna", effort: "high" },
-    sol: { alias: "sol", model: "gpt-6-sol", effort: "high" },
+    sol: { alias: "sol", model: "gpt-6.1-sol", effort: "high" },
   },
   claude: {
     opus: { alias: "opus", model: "opus", effort: "high" },
@@ -292,7 +292,7 @@ export default function (pi: ExtensionAPI) {
       const modelAliasesById: Record<string, ModelAlias> = {
         "gpt-6-astra": "astra",
         "gpt-6-luna": "luna",
-        "gpt-6-sol": "sol",
+        "gpt-6.1-sol": "sol",
       };
       return typeof input.model === "string" && modelAliasesById[input.model]
         ? { ...input, model: modelAliasesById[input.model] }

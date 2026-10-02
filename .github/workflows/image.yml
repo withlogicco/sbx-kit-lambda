@@ -4,11 +4,6 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
-    paths:
-      - .dockerignore
-      - Dockerfile
-      - files/home/.lambda/install-tools.sh
-      - .github/workflows/image.yml
   # Tool versions float, so rebuild weekly to pick up new Pi, Codex, and
   # Claude Code releases without a commit.
   schedule:
