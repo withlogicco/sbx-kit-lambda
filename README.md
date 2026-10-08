@@ -147,6 +147,24 @@ Sonnet 5. GPT-6 models are available only through Codex, not OpenCode Go.
 The Claude models need the usage-based `claude-code` credential; without it
 they appear in the picker but fail to authenticate.
 
+## Session status
+
+Lambda reports its working state for a local dashboard. Each Pi session appends
+JSON lines to `<worktree root>/.lambda/sessions/<session-id>.jsonl`; the last
+line is the current state. `.lambda/` is added once to the repository's
+`info/exclude`, so it never shows in `git status` and `.gitignore` is untouched.
+
+- Every turn starts with an `in_progress` entry: the prompt on a session's first
+  turn, `Resumed, working` afterwards (including rate-limit resumes).
+- The agent calls `report_status` with `needs_input`, `needs_review`, or
+  `in_progress`, as the last action of each turn and sparingly mid-turn.
+- A turn that ends on an error (usage limit, token limit, provider failure), or
+  without a `needs_input`/`needs_review` report, gets a `warning` entry.
+
+Outside a git worktree nothing is written. The file format is shared with the
+dashboard and must not change. Tests live in `tests/`:
+`cd tests && npm ci && npm test && npm run typecheck`.
+
 ## Run
 
 Add this function to `~/.zshrc` to create or resume a sandbox named after the

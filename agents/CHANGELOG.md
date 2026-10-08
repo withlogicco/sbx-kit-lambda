@@ -1,5 +1,6 @@
 # Agent Changelog
 
+- 2026-10-08 — [Report session status to the dashboard](plans/2026-10-08-session-status-reporting.md): add a Pi extension that appends Lambda's working state to `.lambda/sessions/<session-id>.jsonl` through a `report_status` tool and turn-start/turn-end hooks.
 - 2026-09-02 — [Align usage-based Anthropic authentication](plans/2026-09-02-usage-based-anthropic-auth.md): document the shared usage-based Claude credential and reconcile superseded authentication and image-loading decisions.
 - 2026-08-31 — [Prebuild the Lambda agent image](plans/2026-08-31-prebuilt-image.md): move tool installation into a cached image published to GHCR, and settle the Claude Code credential source.
 - 2026-08-31 — [Convert the mixin into an agent kit](plans/2026-08-31-agent-kit.md): make Lambda a schema v2 sandbox kit with its own `lambda` binary, OAuth for OpenAI and Anthropic, and native `codex`/`claude` CLIs.

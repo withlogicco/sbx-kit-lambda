@@ -81,6 +81,18 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
 - Every credential a third-party v2 kit declares needs a user-approved binding.
   Adding a credential or a new inject domain means a new first-run prompt.
 
+## Session status
+
+- `session-status.ts` writes `.lambda/sessions/<session-id>.jsonl` for an
+  external dashboard. Its path, entry fields, and state names are a contract
+  owned jointly with that repo: never change them here alone.
+- Only the turn-end hook writes `warning`; `report_status` must reject it.
+- A "turn" is a Pi agent run, not Pi's per-request `turn_start`/`turn_end`.
+  Start on the first `agent_start` of a run (it repeats on retries) and end on
+  `agent_settled`. The rate-limit resume starts a run without
+  `before_agent_start`, so never require a prompt to write the start entry.
+- Run `cd tests && npm ci && npm test && npm run typecheck` after changing it.
+
 ## Volumes
 
 - Persist only the narrowest resumable conversation stores:
