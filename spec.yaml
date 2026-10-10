@@ -144,11 +144,25 @@ credentials:
         - domain: chatgpt.com
           header: Authorization
           format: "Bearer %s"
+  #   sbx secret set anthropic --command 'pi auth print-api-key --provider anthropic'
+  # Pi emits x-api-key; Claude Code emits Authorization on the same domain.
+  # Keep the platform key out of ANTHROPIC_API_KEY so native Claude continues
+  # using its subscription token instead of picking up Pi's API-key sentinel.
+  - service: anthropic
+    description: "Anthropic platform API key used by Pi"
+    required: false
+    apiKey:
+      name: LAMBDA_ANTHROPIC_API_KEY
+      proxyManaged: true
+      inject:
+        - domain: api.anthropic.com
+          header: x-api-key
+          format: "%s"
   #   sbx secret set claude-code \
   #     --command 'pi auth print-bearer-token --provider anthropic' \
   #     --refresh on-demand
   - service: claude-code
-    description: "Anthropic usage-based access token, minted on the host by Pi"
+    description: "Claude subscription access token for native Claude Code, minted on the host by Pi"
     required: false
     apiKey:
       name: CLAUDE_CODE_OAUTH_TOKEN

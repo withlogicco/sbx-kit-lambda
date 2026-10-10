@@ -60,24 +60,27 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
   `--oauth`, so reusing a built-in service id would replace that agent's OAuth
   registration and break plain `sbx run codex` / `sbx run claude`.
 - `apiKey.inject` overwrites whatever the named header contains, so a consumer
-  only has to emit the header, and one rule per domain serves every consumer on
-  it. Pi emits through `sbx-codex.ts` and `sbx-anthropic.ts`; the native Codex
-  CLI through the `sandboxd` model provider in `~/.codex/config.toml`. Do not
-  delete any of them: without them no header is sent and there is nothing for
-  the proxy to substitute.
+  only has to emit that header. Rules on the same domain can serve different
+  credentials when they target different headers. Pi's Codex header comes
+  from `sbx-codex.ts`; its Anthropic header comes from built-in API-key auth
+  configured in `models.json`. Native Codex uses the `sandboxd` model provider
+  in `~/.codex/config.toml`. Keep these header-emitting configurations intact.
 - Never seed `apiKeyHelper` into `~/.claude/settings.json`. It only works with
   provenance-backed OAuth interception; here it would make Claude Code send a
   dead sentinel and never prompt. `SBX_CRED_ANTHROPIC_MODE` is not a usable
   gate either — it reports `apikey` for an OAuth-only declaration.
-- Pi's Anthropic provider is wired up through `sbx-anthropic.ts` and `anthropic/*`
-  is in the `--models` picker scope. The sentinel it registers must keep the
-  `sk-ant-oat` substring: Pi selects Bearer auth, the Claude Code identity
-  headers and system prompt, and Claude Code tool naming from that shape alone,
-  and any other key shape is sent as `x-api-key`, which the proxy never rewrites.
-- Anthropic usage through the `claude-code` credential is usage-based. Pi's
-  `anthropic/*` models and the native `claude` CLI share the same host-minted
-  bearer token and proxy injection rule, so neither can have a different billing
-  mode within this kit.
+- Pi's `anthropic/*` models use built-in API-key auth with `anthropic.apiKey`
+  set to `$LAMBDA_ANTHROPIC_API_KEY` in `models.json`, and the `anthropic`
+  credential injected into `x-api-key` by the proxy. Do not add a custom
+  Anthropic auth extension: API-key auth only needs configuration.
+- Keep `claude-code` exclusively for native Claude Code (including Pi's Claude
+  subagent), using `CLAUDE_CODE_OAUTH_TOKEN` and `Authorization` injection.
+  Never make Pi consume that subscription credential or replace it with the
+  platform key. Use `LAMBDA_ANTHROPIC_API_KEY` for the platform declaration,
+  not `ANTHROPIC_API_KEY`, which native Claude also reads. Verified with Claude
+  Code 2.1.289 `auth status`: when both that variable and the subscription token
+  are set, it selects `api_key`. Prefer the isolated variable over adding
+  environment filtering to Claude subagents.
 - Every credential a third-party v2 kit declares needs a user-approved binding.
   Adding a credential or a new inject domain means a new first-run prompt.
 
