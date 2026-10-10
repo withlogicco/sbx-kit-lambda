@@ -23,9 +23,8 @@ because the previous mixin had to hijack the `codex` entrypoint.
 ## Authentication
 
 Proxy-managed OAuth does not work for third-party sandbox agent kits — Docker
-gates OAuth interception on built-in provenance, and this kit cannot have it
-(see `agents/plans/2026-08-31-agent-kit.md` for the verification). API-key
-injection *does* work, so Lambda rebuilds host-managed auth on top of it: the
+gates OAuth interception on built-in provenance, and this kit cannot have it.
+API-key injection *does* work, so Lambda rebuilds host-managed auth on top of it: the
 host mints and refreshes the token, and the sandbox proxy substitutes it into
 outbound requests. **No token enters the sandbox, and no credential is
 per-project — one setup serves every sandbox you ever create.**

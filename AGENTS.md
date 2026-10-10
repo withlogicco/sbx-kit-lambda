@@ -9,10 +9,12 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
 
 ## Development
 
+- Make changes in a dedicated worktree under `.worktrees/`, not the main checkout.
 - Validate kit changes with `sbx kit validate .` and review the resolved shape
   with `sbx kit inspect .`.
 - Keep `README.md` aligned with `spec.yaml` installation, authentication, and
   command behavior.
+- Keep Planning and Communication rules identical to `spec.yaml`'s agent instructions.
 - Keep Pi extensions self-contained TypeScript modules that Pi auto-discovers
   from `~/.pi/agent/extensions/`.
 - Indent with spaces, never tabs. `.editorconfig` is authoritative: two spaces
@@ -46,6 +48,17 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
 - Once the user has clearly requested delegation, `run_subagent` must execute
   without a second authorization heuristic; responsibility stays with the
   calling model, and the native agent must not ask for permission.
+
+## Communication
+
+- Be laconic.
+
+## Planning
+
+- Plan only when asked; save only when asked.
+- Save as `agents/plans/YYYY-MM-DD-{slug}.md`.
+- Keep plans laconic: scope, steps, checks, decisions.
+- Keep useful plans; delete trivial ones.
 
 ## Authentication
 

@@ -69,11 +69,16 @@ agentInstructions:
     - Run the web app's tests from the workspace, not from a Compose container. The web app's test command must supply the environment variables it needs to connect to those services through `localhost`.
     - Use the .github/workflows files to understand what tests and linting need to be run and how.
 
-    ## Plan conventions
+    ## Communication
 
-    - When creating a plan, always write it to `agents/plans/{slug}.md`.
-    - Keep plans concise: scope, steps, relevant files, implementation, verification, and decisions.
-    - When done, keep only the plan as a log of the changes and decisions. In case the plan is very trivial and does not contain decisions, remove it completely.
+    - Be laconic.
+
+    ## Planning
+
+    - Plan only when asked; save only when asked.
+    - Save as `agents/plans/YYYY-MM-DD-{slug}.md`.
+    - Keep plans laconic: scope, steps, checks, decisions.
+    - Keep useful plans; delete trivial ones.
 
     ## Native subagents
 
@@ -85,7 +90,7 @@ agentInstructions:
 
     - Do not create, amend, or push commits unless the user explicitly asks for a commit or PR.
     - When you need the user to review a change, always stage the changes locally and ask for a review.
-    - Always create worktrees in the .worktrees directory within the repository. If .worktrees is not Git ignored globally, add it to the repository's .gitignore.
+    - Make changes in a dedicated worktree under `.worktrees/`, not the main checkout. If `.worktrees` is not Git ignored globally, add it to the repository's `.gitignore`.
 
 permissions:
   network:
