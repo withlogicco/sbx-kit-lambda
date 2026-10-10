@@ -23,9 +23,8 @@ because the previous mixin had to hijack the `codex` entrypoint.
 ## Authentication
 
 Proxy-managed OAuth does not work for third-party sandbox agent kits — Docker
-gates OAuth interception on built-in provenance, and this kit cannot have it
-(see `agents/plans/2026-08-31-agent-kit.md` for the verification). API-key
-injection *does* work, so Lambda rebuilds host-managed auth on top of it: the
+gates OAuth interception on built-in provenance, and this kit cannot have it.
+API-key injection *does* work, so Lambda rebuilds host-managed auth on top of it: the
 host mints and refreshes the token, and the sandbox proxy substitutes it into
 outbound requests. **No token enters the sandbox, and no credential is
 per-project — one setup serves every sandbox you ever create.**
@@ -38,7 +37,10 @@ sbx secret set chatgpt-codex \
   --command 'pi auth print-bearer-token --provider openai-codex' \
   --refresh on-demand
 
-# Claude usage-based access, minted fresh on every request by Pi on the host
+# Anthropic platform API key from Pi on the host (skip if already configured)
+sbx secret set anthropic --command 'pi auth print-api-key --provider anthropic'
+
+# Claude subscription for native Claude Code only, refreshed by Pi on the host
 sbx secret set claude-code \
   --command 'pi auth print-bearer-token --provider anthropic' \
   --refresh on-demand
@@ -59,24 +61,28 @@ for each service and the domains it may inject into. Approvals live in
 | -------- | ----- | ------------------ | ---------- |
 | Pi (`lambda`) | Authorization header via `sbx-codex.ts` | `chatgpt.com` | `chatgpt-codex` |
 | Native `codex` | Authorization header via the `sandboxd` model provider in `~/.codex/config.toml` | `chatgpt.com` | `chatgpt-codex` |
-| Native `claude` | Authorization bearer from `CLAUDE_CODE_OAUTH_TOKEN` | `api.anthropic.com` | `claude-code` (usage-based) |
-| Pi's `anthropic/*` models | Authorization header via `sbx-anthropic.ts` | `api.anthropic.com` | `claude-code` (usage-based) |
+| Native `claude` (including `/claude` subagents) | Authorization bearer from `CLAUDE_CODE_OAUTH_TOKEN` | `api.anthropic.com` | `claude-code` (subscription) |
+| Pi's `anthropic/*` models | `x-api-key` via built-in auth and `models.json` | `api.anthropic.com` | `anthropic` (platform API key) |
 | Pi's OpenCode Go provider | `OPENCODE_API_KEY` | `opencode.ai` | `opencode-go` |
 | `gh`, `git` | `GH_TOKEN` | `api.github.com`, `github.com`, `raw.githubusercontent.com` | `github` |
 
-Consumers only need to *emit* an `Authorization` header — `apiKey.inject`
-overwrites whatever it contains, so the placeholder values in `sbx-codex.ts`,
-`sbx-anthropic.ts`, and `config.toml` are not secrets and are never sent
-upstream. One injection rule serves every consumer on a domain, which is why
-Pi's Claude models and the native `claude` CLI share the `claude-code`
-credential, so both use the same usage-based billing mode.
+Consumers only need to *emit* the configured header — `apiKey.inject`
+overwrites whatever it contains, so the placeholders in `sbx-codex.ts`,
+`config.toml`, and proxy-managed environment variables are not secrets. With approved credential
+bindings, the proxy replaces them before forwarding requests upstream.
 
-Pi picks its Anthropic auth mode from the *shape* of the key: only one
-containing `sk-ant-oat` takes the OAuth path that sends `Authorization: Bearer`
-(along with the Claude Code identity headers, system prompt, and tool naming
-Anthropic expects from such a token). Anything else is sent as `x-api-key`,
-which the proxy does not rewrite. `sbx-anthropic.ts` exists to satisfy that
-check — its sentinel is shaped like an OAuth token and is otherwise meaningless.
+The two Anthropic credentials share a domain but target different headers:
+Pi's `x-api-key` gets the `anthropic` platform key; native Claude's
+`Authorization` gets the `claude-code` subscription bearer. Pi uses its
+built-in Anthropic API-key authentication; no custom auth extension is needed.
+`models.json` sets `anthropic.apiKey` to `$LAMBDA_ANTHROPIC_API_KEY` so Pi reads
+the proxy-managed placeholder from that variable.
+
+The credential uses `LAMBDA_ANTHROPIC_API_KEY`, not `ANTHROPIC_API_KEY`, to keep
+native Claude from picking up a platform key and switching away from its
+subscription. Claude Code 2.1.289 selects the API key when both standard API-key
+and subscription-token variables are present. No new Claude Code login or
+subagent environment filtering is needed with the isolated variable.
 
 > [!NOTE]
 > The `chatgpt-codex` service is deliberately not named `openai`. `sbx secret
@@ -89,15 +95,18 @@ check — its sentinel is shaped like an OAuth token and is otherwise meaningles
 Neither subscription can be used with an API key: ChatGPT Plus/Pro and Claude
 Pro/Max are OAuth-only, and an OpenAI or Anthropic API key is a separate,
 pay-per-token account. The host-minted-token approach above avoids a
-per-sandbox browser login. Anthropic calls using the shared `claude-code`
-credential are usage-based.
+per-sandbox browser login for native Codex and Claude Code. Pi's Anthropic
+models instead use platform API billing through the separate `anthropic` key;
+that key neither supplies nor replaces the Claude Code subscription.
 
 If you log in inside the sandbox instead, that authentication lasts only until
 sandbox recreation. Credentials are deliberately outside the narrowly scoped
 session volumes; host-managed authentication is the persistent path.
 
 Global credentials are applied when a sandbox is created. Recreate an existing
-sandbox after adding or changing one.
+sandbox after adding or changing one. If `sbx secret set anthropic` is already
+configured, keep it as-is: recreate with this updated kit and approve the new
+`anthropic` binding. The existing `claude-code` secret stays unchanged.
 
 ## Native subagents
 
@@ -144,8 +153,9 @@ scoped to Astra, Luna, and Sol from the GPT-6.1 Codex family; OpenCode Go's
 GPT-5.6 Luna, Kimi K3, GLM 5.3 and 5.3 Flash, DeepSeek V4.1 Flash and V4 Pro,
 and Qwen 3.8 Flash and Max; and Anthropic's Claude Opus 5.5, Fable 5.1, and
 Sonnet 5. GPT-6 models are available only through Codex, not OpenCode Go.
-The Claude models need the usage-based `claude-code` credential; without it
-they appear in the picker but fail to authenticate.
+Pi's Claude models need the `anthropic` platform API-key credential; without
+it they appear in the picker but fail to authenticate. `/claude` subagents
+continue to use the separate `claude-code` subscription credential.
 
 ## Run
 
