@@ -159,6 +159,84 @@ Pi's Claude models need the `anthropic` platform API-key credential; without
 it they appear in the picker but fail to authenticate. `/claude` subagents
 continue to use the separate `claude-code` subscription credential.
 
+## Session status
+
+Lambda reports its working state for a local dashboard. Each Pi session appends
+JSON lines to `<main checkout>/.lambda/sessions/<session-id>.jsonl`, even when
+launched in a linked worktree. The last valid line is the current state.
+`.lambda/` is added to the repository's `info/exclude`, so it stays out of
+`git status` and `.gitignore` is untouched. Concurrent sessions may add harmless
+duplicate exclusions. If an append was interrupted, the next write adds a line
+boundary without rewriting history.
+
+- Every turn starts with an `in_progress` entry: the prompt on a session's first
+  turn, `Resumed, working` afterwards (including rate-limit resumes).
+- The agent calls `report_status` with `needs_input`, `needs_review`, or
+  `in_progress`, as the last action of each turn and sparingly mid-turn.
+- Every report must include `worktree`: a registered Git worktree root relative
+  to the main checkout, e.g. `.worktrees/fix-import`. It normalizes the
+  path, accepts sibling worktrees (`../...`), and rejects absolute paths,
+  subdirectories, unrelated repositories, and missing worktrees before writing.
+  Use `"."` to explicitly return to the main checkout. A shell `cd` does not
+  update this association.
+- A run that settles on an error (usage limit, token limit, provider failure),
+  or without a `needs_input`/`needs_review` report, gets a `warning` entry.
+  Quitting before settlement leaves `in_progress`; the dashboard marks it stale.
+
+### Pi UI
+
+The interactive footer shows **worktree · state · latest report summary** from
+this Lambda session. The worktree is bold; `needs_input` and `needs_review` are
+green, `warning` is yellow, and `in_progress` keeps the default color. The
+summary acts as a short task title; start/warning hooks update the state without
+replacing it or the worktree. Before the first report, it shows main (`.`) and
+the initial task summary. It never infers the working worktree from Pi's launch
+directory or changes a user-assigned Pi session name.
+
+The footer updates immediately after a report and restores its values from the
+central JSONL on `/reload`, resume, or session switching. Invalid/incomplete
+records are skipped. Reading history does not create status files, and headless
+modes continue reporting without terminal UI calls.
+
+For local development, symlink this extension into the Pi installation:
+
+```bash
+# Back up an existing installed copy outside extensions/ first.
+ln -sfn "$PWD/files/home/.pi/agent/extensions/session-status.ts" \
+  ~/.pi/agent/extensions/session-status.ts
+```
+
+Run this from the checkout/worktree you are editing, then use `/reload` in Pi
+after each edit. A symlink makes the source live, but does not hot-reload it.
+
+### Dashboard contract
+
+Entries keep `v: 1`, the existing fields and states, and optionally append a
+`worktree` string after `body`:
+
+```json
+{"v":1,"ts":"2026-10-09T10:56:28+03:00","state":"in_progress","summary":"Fixing imports","body":"Implementing the fix.","worktree":".worktrees/fix-import"}
+```
+
+Read valid entries in append order. **State and content come from the last valid
+entry; grouping comes from the latest entry that contains `worktree`.** Missing
+`worktree` means unchanged, not reset, including start/warning hooks and resumed
+sessions. With no reported worktree, group under the main checkout (host).
+Resolve reported paths relative to that checkout, not the launch directory.
+Keep one session identity and one file when its grouping changes; do not copy or
+move its history. Unknown/deleted worktrees should remain visible rather than
+hiding the session. Existing v1 entries without the field remain readable.
+
+The main checkout must be accessible and writable. Repositories whose primary
+repository is bare, and linked launches with separately stored Git metadata
+(`--separate-git-dir`), are unsupported. Outside a git worktree nothing is written.
+This contract is shared with the dashboard; coordinate future changes with its
+agent.
+
+Tests live in `tests/`: `cd tests && npm ci && npm test && npm run typecheck`.
+After updating an installed `~/.pi/agent/extensions/session-status.ts`, use
+`/reload` for the running Pi session to pick up the new tool parameter.
+
 ## Run
 
 Add this function to `~/.zshrc` to create or resume a sandbox named after the

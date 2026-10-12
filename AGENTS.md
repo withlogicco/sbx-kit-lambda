@@ -15,6 +15,7 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
 - Keep `README.md` aligned with `spec.yaml` installation, authentication, and
   command behavior.
 - Keep Planning and Communication rules identical to `spec.yaml`'s agent instructions.
+- Keep rules simple and general; omit one-off demo instructions.
 - Keep Pi extensions self-contained TypeScript modules that Pi auto-discovers
   from `~/.pi/agent/extensions/`.
 - Indent with spaces, never tabs. `.editorconfig` is authoritative: two spaces
@@ -102,6 +103,32 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
 - `/backup` and `/restore` default to `.lambda/backup` in the current working
   directory. Back up session history only, never credentials or the whole Pi
   agent directory.
+
+## Session status
+
+- `session-status.ts` writes `<main checkout>/.lambda/sessions/<session-id>.jsonl`
+  for an external dashboard, regardless of where Pi launches. Its path, entry
+  fields, and state names are a shared contract: coordinate changes with that
+  repo and provide a dashboard handoff.
+- Pi's `ctx.cwd` is the launch directory; shell `cd` and worktree edits do not
+  change it. Never infer the active worktree from that directory. Every agent
+  report includes required repository-relative `worktree` metadata; `.` means
+  main. Hooks omit it, and the dashboard folds history to determine grouping
+  independently of current state.
+- Pi's footer restores this session's worktree and last reported summary from
+  the central JSONL. Start/warning hooks update state, not that title or worktree.
+  Bold the worktree; leave `in_progress` uncolored, use green for `needs_input`
+  and `needs_review`, and yellow for warning states. UI-only rendering must not
+  create storage or rename the user's Pi session.
+- Only the turn-end hook writes `warning`; `report_status` must reject it.
+- Leave `in_progress` unchanged on process exit; the dashboard owns stale detection.
+- Linked launches with `--separate-git-dir` are out of scope. Concurrent duplicate
+  `.lambda/` exclusions are harmless; do not add cross-process locking.
+- A "turn" is a Pi agent run, not Pi's per-request `turn_start`/`turn_end`.
+  Start on the first `agent_start` of a run (it repeats on retries) and end on
+  `agent_settled`. The rate-limit resume starts a run without
+  `before_agent_start`, so never require a prompt to write the start entry.
+- Run `cd tests && npm ci && npm test && npm run typecheck` after changing it.
 
 ## Sandbox state
 
