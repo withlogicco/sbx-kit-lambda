@@ -30,8 +30,8 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
   idempotent: `setup.install` runs it on every sandbox creation, and it must
   no-op against a prebuilt image.
 - Beyond that script, `setup.install` is for runtime-dependent work only:
-  volume-mount ownership, npm proxy configuration, and config seeding that reads
-  `WORKSPACE_DIR` or `HTTP_PROXY`.
+  npm proxy configuration and config seeding that reads `WORKSPACE_DIR` or
+  `HTTP_PROXY`.
 - `sandbox.build` is declared for discoverability but sbx does not act on it.
   Expect one notice on every `sbx kit validate` / `sbx kit inspect` saying the
   image is taken from `sandbox.image`; that is not a regression. Declaring
@@ -97,20 +97,14 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
 - Every credential a third-party v2 kit declares needs a user-approved binding.
   Adding a credential or a new inject domain means a new first-run prompt.
 
-## Volumes
+## Sandbox state
 
-- Persist only the narrowest resumable conversation stores:
-  `~/.pi/agent/sessions`, `~/.claude/projects`, and `~/.codex/sessions`.
-  Claude's project memory is co-located under `projects` and is therefore also
-  retained. Do not persist either native CLI's whole state directory; setup
-  recreates required configuration and credentials belong in the host secret
-  store.
-- Never mount a volume over `~/.pi/agent` itself: the kit ships `models.json`
-  and its extensions there, and a volume would shadow kit-owned files across
-  kit updates.
-- Volumes are keyed to the sandbox name and cannot be shared between sandboxes.
-  Never treat a volume as a place to keep credentials; that would force a login
-  per project. Credentials belong in the host secret store.
+- Do not declare volumes or add custom persistence machinery. Agent state lives
+  in the sandbox's ordinary filesystem and survives stops and restarts.
+- Local SBX deletes its volumes along with the sandbox. Never claim that
+  sessions survive `sbx rm` or `lambda --reset`; require a backup before
+  recommending deletion when state matters.
+- Credentials belong in the host secret store, not the sandbox.
 
 ## Subagents
 

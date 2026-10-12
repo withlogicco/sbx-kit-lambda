@@ -100,8 +100,7 @@ models instead use platform API billing through the separate `anthropic` key;
 that key neither supplies nor replaces the Claude Code subscription.
 
 If you log in inside the sandbox instead, that authentication lasts only until
-sandbox recreation. Credentials are deliberately outside the narrowly scoped
-session volumes; host-managed authentication is the persistent path.
+sandbox recreation. Host-managed authentication survives sandbox deletion.
 
 Global credentials are applied when a sandbox is created. Recreate an existing
 sandbox after adding or changing one. If `sbx secret set anthropic` is already
@@ -194,7 +193,8 @@ lambda() {
 
 Reload with `source ~/.zshrc`, then run `lambda`. Use `lambda --reset` to
 recreate the current directory's sandbox after changing the kit or global
-credentials.
+credentials. **This deletes its session history and all other sandbox-local
+state.**
 
 Without the helper:
 
@@ -214,32 +214,16 @@ Loading the kit from GitHub requires the source to be allowlisted once:
 sbx settings set kit.allowedSources '["docker.io/","github.com/withlogicco/"]'
 ```
 
-## Persistent state
+## Sandbox state
 
-Volumes survive sandbox recreation:
+Session history and other agent state live in the sandbox's ordinary filesystem.
+They survive stopping and restarting the same sandbox, but **`sbx rm` and
+`lambda --reset` delete them**, even if the replacement uses the same name.
+Back up anything you need with `sbx cp` before deletion. Host workspace files
+and host-managed credentials are separate from sandbox-local state.
 
-| Path | Contents |
-| ---- | -------- |
-| `/home/agent/.pi/agent/sessions` | Pi session history |
-| `/home/agent/.claude/projects` | Claude Code transcripts used by `--resume` and `--continue`, plus co-located project memory |
-| `/home/agent/.codex/sessions` | Codex rollout transcripts used by `codex resume` |
-
-The volume roots are limited to resumable conversations. Claude also stores its
-auto-memory below `projects`, so that state is unavoidably included in the same
-volume. CLI credentials, settings, caches, prompt history, plugins, MCP
-configuration, and Claude's file checkpoints are not needed for resume and are
-intentionally discarded on recreation. The kit recreates the required Codex
-and Claude settings during setup, while authentication is host-managed.
-
-`~/.pi/agent` as a whole is deliberately not persisted: the kit ships
-`models.json` and its extensions into that directory, and a volume there would
-shadow kit-owned files across kit updates. Pi's `auth.json` therefore does not
-survive recreation for the same reason.
-
-Volumes are keyed to the sandbox name, so they are never shared between
-sandboxes. That is why credentials are resolved from the host secret store
-rather than kept in a volume — otherwise every project would need its own
-logins.
+The kit declares no volumes: local SBX volumes are also deleted with their
+sandbox, so they do not preserve sessions across recreation.
 
 ## Installed tools
 
