@@ -201,29 +201,8 @@ credentials:
           scheme: basic
           username: x-access-token
 
-# Volumes survive sandbox recreation. Persist only the narrowest conversation
-# stores needed to resume sessions; Claude's co-located project memory is also
-# retained. Configuration, credentials, caches, and other CLI state are
-# intentionally recreated with the sandbox. `~/.pi/agent` as a whole must not
-# be mounted because that would shadow the kit-owned extensions and models.json
-# across kit updates.
-volumes:
-  - path: /home/agent/.pi/agent/sessions
-    size: 2g
-  - path: /home/agent/.claude/projects
-    size: 2g
-  - path: /home/agent/.codex/sessions
-    size: 1g
-
 setup:
   install:
-    - command: |
-        set -eu
-        mkdir -p /home/agent/.pi/agent/extensions /home/agent/.pi/agent/sessions \
-                 /home/agent/.claude/projects /home/agent/.codex/sessions /home/agent/.agents
-        chown -R agent:agent /home/agent/.pi /home/agent/.claude /home/agent/.codex /home/agent/.agents
-      user: "0"
-      description: "Ensure agent ownership of the Pi, Claude, and Codex home directories"
     - command: 'if [ -n "${HTTP_PROXY:-}" ]; then npm config set proxy="$HTTP_PROXY" https-proxy="${HTTPS_PROXY:-$HTTP_PROXY}"; fi'
       user: "1000"
       description: "Configure npm to use the sandbox proxy"
@@ -243,7 +222,7 @@ setup:
     # Codex from insisting on its own login, and forced_login_method = "api"
     # stops a remote client from replacing this with sandbox-local OAuth.
     # Rewritten unconditionally on every create, so it is deterministic and
-    # idempotent. Only ~/.codex/sessions is persisted.
+    # idempotent.
     - command: |
         set -eu
         mkdir -p /home/agent/.codex
