@@ -46,6 +46,7 @@ sandbox:
     - --models
     - "openai-codex/gpt-6-astra,openai-codex/gpt-6-luna,openai-codex/gpt-6.1-sol,opencode-go/gpt-5.6-luna,opencode-go/kimi-k3,opencode-go/glm-5.3,opencode-go/glm-5.3-flash,opencode-go/deepseek-v4.1-flash,opencode-go/deepseek-v4-pro,opencode-go/qwen3.8-flash,opencode-go/qwen3.8-max,anthropic/claude-opus-5-5,anthropic/claude-fable-5-1,anthropic/claude-sonnet-5"
 
+# Keep this kit reminder generic; parameter guidance lives in the tool description.
 agentInstructions:
   filename: AGENTS.md
   content: |
@@ -91,6 +92,7 @@ agentInstructions:
     - Do not create, amend, or push commits unless the user explicitly asks for a commit or PR.
     - When you need the user to review a change, always stage the changes locally and ask for a review.
     - Make changes in a dedicated worktree under `.worktrees/`, not the main checkout. If `.worktrees` is not Git ignored globally, add it to the repository's `.gitignore`.
+    - When report_status is available, call it as your last tool before ending every response.
 
 permissions:
   network:
