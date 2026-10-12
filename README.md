@@ -148,7 +148,10 @@ Override any role with `LAMBDA_<BACKEND>_<ROLE>_MODEL` and
 `LAMBDA_CLAUDE_EXECUTABLE` override which binary is invoked. The
 `run_subagent` tool accepts the same optional model aliases.
 
-Pi starts on `openai-codex/gpt-6.1-sol` with high thinking. Its model picker is
+Pi starts on `openai-codex/gpt-6.1-sol` with high thinking. The kit overrides
+Pi's Sol context window to 500,000 tokens to match OpenAI's live Codex catalog;
+other models, output limits, and native Codex configuration are unchanged.
+Its model picker is
 scoped to Astra, Luna, and Sol from the GPT-6.1 Codex family; OpenCode Go's
 GPT-5.6 Luna, Kimi K3, GLM 5.3 and 5.3 Flash, DeepSeek V4.1 Flash and V4 Pro,
 and Qwen 3.8 Flash and Max; and Anthropic's Claude Opus 5.5, Fable 5.1, and
