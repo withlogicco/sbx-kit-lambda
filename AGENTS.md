@@ -97,6 +97,12 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
 - Every credential a third-party v2 kit declares needs a user-approved binding.
   Adding a credential or a new inject domain means a new first-run prompt.
 
+## Session backups
+
+- `/backup` and `/restore` default to `.lambda/backup` in the current working
+  directory. Back up session history only, never credentials or the whole Pi
+  agent directory.
+
 ## Sandbox state
 
 - Do not declare volumes or add custom persistence machinery. Agent state lives
