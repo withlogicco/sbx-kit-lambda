@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --import ./resolve.mjs --test ./*.test.ts session-backup.test.mjs",
+    "test": "node --test ./*.test.mjs",
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
