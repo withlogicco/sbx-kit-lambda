@@ -222,11 +222,40 @@ sbx settings set kit.allowedSources '["docker.io/","github.com/withlogicco/"]'
 Session history and other agent state live in the sandbox's ordinary filesystem.
 They survive stopping and restarting the same sandbox, but **`sbx rm` and
 `lambda --reset` delete them**, even if the replacement uses the same name.
-Back up anything you need with `sbx cp` before deletion. Host workspace files
-and host-managed credentials are separate from sandbox-local state.
+Use `/backup` for Pi sessions (below), or `sbx cp` for other state, before
+deletion. Host workspace files and host-managed credentials are separate from
+sandbox-local state.
 
 The kit declares no volumes: local SBX volumes are also deleted with their
 sandbox, so they do not preserve sessions across recreation.
+
+### Session backup and restore
+
+```text
+/backup                          # defaults to .lambda/backup in the current directory
+/restore                         # restores from that directory
+/backup /path/to/local/archive
+/restore /path/to/local/archive
+```
+
+The bundled `session-backup.ts` extension copies all Pi session JSONL files,
+across all project directories, into `<directory>/sessions/`, preserving their
+paths and contents. It respects `PI_CODING_AGENT_DIR`; when using a custom
+`--session-dir` outside that store, it backs up/restores that entire custom
+store instead. Restore with the same session-directory configuration.
+
+Relative paths resolve from Pi's working directory; `~`, spaces, and optional
+surrounding quotes are supported. Repeated backups refresh archived files and
+retain previously backed-up sessions. Restore merges missing files, skips all
+existing files (including the active session), and never deletes live sessions.
+Use `/resume` afterward; restore does not switch the current conversation.
+Overlapping stores and symbolic links within either store are rejected.
+
+Only persisted Pi sessions are included, not unsaved `--no-session` history,
+settings, credentials, or native Codex/Claude sessions. The command waits for
+the current Pi run to become idle; stop other Pi instances for a consistent
+backup. Transcripts can contain sensitive data: protect the backup directory
+and do not commit it. `.lambda/backup/` is ignored in this repository.
 
 ## Installed tools
 
@@ -303,7 +332,11 @@ policy allows the VS Code server and extension gallery download hosts.
 ```bash
 sbx kit validate .
 sbx kit inspect .
+npm ci --prefix tests
+npm test --prefix tests
 ```
+
+The session-backup tests use Jiti, the same TypeScript loader as Pi.
 
 A clean local smoke sandbox:
 
