@@ -2,7 +2,7 @@
 
 Lambda is a Docker Sandboxes **agent kit**: it defines its own sandbox agent
 rather than layering on top of a built-in one. The agent binary is `lambda`, a
-symlink to [Pi](https://pi.dev), launched with Lambda's provider and model
+symlink to [Pi](https://pi.dev), using Lambda's shared settings and model
 defaults:
 
 ```bash
@@ -151,13 +151,66 @@ Pi starts on `openai-codex/gpt-6.1-sol` with high thinking. The kit overrides
 Pi's Sol context window to 500,000 tokens to match OpenAI's live Codex catalog;
 other models, output limits, and native Codex configuration are unchanged.
 Its model picker is
-scoped to Astra, Luna, and Sol from the GPT-6.1 Codex family; OpenCode Go's
-GPT-5.6 Luna, Kimi K3, GLM 5.3 and 5.3 Flash, DeepSeek V4.1 Flash and V4 Pro,
-and Qwen 3.8 Flash and Max; and Anthropic's Claude Opus 5.5, Fable 5.1, and
-Sonnet 5. GPT-6 models are available only through Codex, not OpenCode Go.
-Pi's Claude models need the `anthropic` platform API-key credential; without
-it they appear in the picker but fail to authenticate. `/claude` subagents
-continue to use the separate `claude-code` subscription credential.
+scoped to GPT-6 Astra, GPT-6 Luna, GPT-6.1 Sol, and GPT-6.1 Terra from Codex; OpenCode Go's
+GPT-6 Luna, Kimi K2.7 Code and K3, GLM 5.3 and 5.3 Flash, DeepSeek V4.1 Flash and V4 Pro,
+and Qwen 3.8 Flash and Max; Anthropic's Claude Sonnet 5.5, Opus 5.5,
+and Fable 5.1; and xAI's Grok 4.3 and 4.7. Pi's Claude models need a platform
+API key; `/claude` subagents use a separate subscription credential. Model
+selection does not configure credentials; see Authentication for provider setup.
+
+## Pi settings
+
+`files/home/.pi/agent/settings.json` supplies `~/.pi/agent/settings.json` in new
+sandboxes (not `~/.pi/settings.json`). It combines the sandbox preferences with
+local defaults: Sol/high, the model scope above, dark theme, all-at-once
+steering, condensed changelogs, no install telemetry, and regular terminal UI.
+Fullscreen preferences are retained for switching modes. No extra Pi packages
+are configured; bundled extensions are auto-discovered independently.
+
+Project configuration is trusted automatically inside the SBX security boundary.
+The Anthropic subscription extra-usage warning is disabled; this does not change
+billing, and Pi's Anthropic models still use the platform API key.
+
+Provider, model, thinking, and cycling scope use `defaultProvider`,
+`defaultModel`, `defaultThinkingLevel`, and `enabledModels`, rather than forced
+`sandbox.command` flags. Direct `pi` and `lambda` launches share these defaults.
+Use `/settings`, `/model`, `/thinking`, or `/scoped-models` to customize them;
+trusted project `.pi/settings.json` settings and explicit CLI flags can override
+the defaults. Resumed sessions restore their saved model and thinking level.
+
+Model IDs were checked against the live [Pi catalog](https://pi.dev/models)
+and [OpenCode Go catalog](https://opencode.ai/zen/go/v1/models) on 2026-10-23.
+Keep at least a fast/cheap and a recommended option per provider, with a
+higher-capability tier where useful. An older model can remain for a distinct
+speed/cost trade-off: Grok 4.3 is intentional, not a stale version of 4.7.
+
+| Provider | Fast / cheap | Recommended / default | Extreme |
+| -------- | ------------ | ----------- | --------------------- |
+| Codex | GPT-6 Luna | GPT-6.1 Sol | GPT-6 Astra |
+| Anthropic | Sonnet 5.5 | Opus 5.5 | Fable 5.1 |
+| xAI | Grok 4.3 | Grok 4.7 | — |
+
+OpenCode Go keeps a cheaper/default pair for each selected lab:
+
+| Lab | Cheap / fast option | Default choice |
+| --- | ------------------- | -------------- |
+| Kimi | Kimi K2.7 Code | Kimi K3 |
+| GLM | GLM 5.3 Flash | GLM 5.3 |
+| DeepSeek | DeepSeek V4.1 Flash | DeepSeek V4 Pro |
+| Qwen | Qwen 3.8 Flash | Qwen 3.8 Max |
+
+GPT-6 Luna remains on Go as a cheap frontier fallback when direct Codex access
+is unavailable. Go's catalog does not list Grok 4.3, so that speed/cost option
+stays on xAI only; add it to Go if it becomes available there.
+
+These are manual selection guidelines, not automatic routing, failover, or
+per-provider startup defaults. Sol remains the global default. Claude uses
+Sonnet for cheap/fast work, Opus as its default choice, and Fable for extreme
+work; Haiku is deliberately excluded.
+
+Device IDs and `lastChangelogVersion` are installation-specific and deliberately
+omitted. Existing sandboxes are not updated by editing the kit: edit their
+`~/.pi/agent/settings.json` directly, or back up sessions before recreating.
 
 ## Session status
 

@@ -1,0 +1,39 @@
+{
+  "defaultModel": "gpt-6.1-sol",
+  "defaultProvider": "openai-codex",
+  "defaultThinkingLevel": "high",
+  "enabledModels": [
+    "openai-codex/gpt-6-astra",
+    "openai-codex/gpt-6-luna",
+    "openai-codex/gpt-6.1-sol",
+    "openai-codex/gpt-6.1-terra",
+    "opencode-go/gpt-6-luna",
+    "opencode-go/kimi-k2.7-code",
+    "opencode-go/kimi-k3",
+    "opencode-go/glm-5.3",
+    "opencode-go/glm-5.3-flash",
+    "opencode-go/deepseek-v4.1-flash",
+    "opencode-go/deepseek-v4-pro",
+    "opencode-go/qwen3.8-flash",
+    "opencode-go/qwen3.8-max",
+    "anthropic/claude-sonnet-5-5",
+    "anthropic/claude-opus-5-5",
+    "anthropic/claude-fable-5-1",
+    "xai/grok-4.3",
+    "xai/grok-4.7"
+  ],
+  "theme": "dark",
+  "steeringMode": "all",
+  "collapseChangelog": true,
+  "enableInstallTelemetry": false,
+  "defaultProjectTrust": "always",
+  "treeFilterMode": "default",
+  "warnings": {
+    "anthropicExtraUsage": false
+  },
+  "tuiMode": "regular",
+  "fullscreenExitOutput": "transcript",
+  "fullscreenCopyOnSelect": true,
+  "fullscreenWheelScrollLines": "auto",
+  "packages": []
+}
