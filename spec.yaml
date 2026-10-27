@@ -33,18 +33,10 @@ sandbox:
   build:
     context: .
     dockerfile: Dockerfile
-  # `lambda` is a symlink to `pi`, so the model/provider defaults ride in
-  # `command` rather than in a wrapper script.
+  # `lambda` is a symlink to `pi`. Shared preferences and model defaults live
+  # in files/home/.pi/agent/settings.json, not forced command-line flags.
   entrypoint: [lambda]
-  command:
-    - --provider
-    - openai-codex
-    - --model
-    - gpt-6.1-sol
-    - --thinking
-    - high
-    - --models
-    - "openai-codex/gpt-6-astra,openai-codex/gpt-6-luna,openai-codex/gpt-6.1-sol,opencode-go/gpt-5.6-luna,opencode-go/kimi-k3,opencode-go/glm-5.3,opencode-go/glm-5.3-flash,opencode-go/deepseek-v4.1-flash,opencode-go/deepseek-v4-pro,opencode-go/qwen3.8-flash,opencode-go/qwen3.8-max,anthropic/claude-opus-5-5,anthropic/claude-fable-5-1,anthropic/claude-sonnet-5"
+  command: []
 
 # Keep this kit reminder generic; parameter guidance lives in the tool description.
 agentInstructions:

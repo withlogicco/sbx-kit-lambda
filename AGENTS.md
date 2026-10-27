@@ -9,7 +9,9 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
 
 ## Development
 
-- Make changes in a dedicated worktree under `.worktrees/`, not the main checkout.
+- Develop in task-specific worktrees under `.worktrees/`; keep their changes
+  separate. After finishing an update, combine both worktrees' changes into the
+  main worktree so it holds the unified code. Do not create commits unless asked.
 - Validate kit changes with `sbx kit validate .` and review the resolved shape
   with `sbx kit inspect .`.
 - Keep `README.md` aligned with `spec.yaml` installation, authentication, and
@@ -18,6 +20,18 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
 - Keep rules simple and general; omit one-off demo instructions.
 - Keep Pi extensions self-contained TypeScript modules that Pi auto-discovers
   from `~/.pi/agent/extensions/`.
+- Keep shared Pi preferences and model defaults in
+  `files/home/.pi/agent/settings.json`, not `sandbox.command` flags. Omit
+  installation-specific state such as `deviceId` and `lastChangelogVersion`.
+- Verify model IDs against live Pi and provider catalogs. Keep at least two
+  models per provider: fast/cheap and recommended, plus a top-capability tier
+  where useful (e.g. Codex and Claude). Preserve older models with distinct
+  speed/cost value, such as Grok 4.3; newest alone is not the selection rule.
+- Claude tiers are Sonnet (cheap/fast), Opus (default), and Fable (extreme).
+  Do not include Haiku in the curated model scope.
+- OpenCode Go keeps cheap/default pairs per selected lab (Kimi, GLM, DeepSeek,
+  Qwen) and GPT-6 Luna as a Codex fallback. Add Grok 4.3 there only if Go's
+  catalog lists it; keep the direct xAI choice independently.
 - Indent with spaces, never tabs. `.editorconfig` is authoritative: two spaces
   for TypeScript, JavaScript, JSON, and YAML.
 - Install supported standalone CLI tools with Webi; use an upstream installer
