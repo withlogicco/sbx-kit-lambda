@@ -186,7 +186,11 @@ export async function repositoryRoot(cwd: string): Promise<string> {
   return root;
 }
 
-/** Validate a registered worktree root, then serialize a portable relative path. */
+/**
+ * Validate explicitly reported worktree metadata and serialize a relative path.
+ * Pi's launch cwd does not follow shell directory changes or worktree edits,
+ * so it cannot supply the active association.
+ */
 export async function normalizeWorktree(root: string, path: string): Promise<string> {
   let candidate: string;
   try {
@@ -215,7 +219,11 @@ export async function excludePath(cwd: string): Promise<string> {
   return resolve(cwd, await git(cwd, ["rev-parse", "--git-path", "info/exclude"]));
 }
 
-/** Append the broad runtime-state exclusion without rewriting existing rules. */
+/**
+ * Append the broad exclusion so runtime state is ignored at any directory depth.
+ * Preserve existing rules; repositories can narrowly re-include kit assets in
+ * their .gitignore, as this kit does for files/home/.lambda/install-tools.sh.
+ */
 export async function ensureExcluded(path: string): Promise<boolean> {
   let content = "";
   try {

@@ -1,5 +1,6 @@
 #!/bin/sh
-# Installs Lambda's agent binaries.
+# Installs Lambda's agent binaries. Use Webi for supported standalone CLIs;
+# Pi, Codex, and Claude Code use their upstream installers.
 #
 # Two consumers share this script so tool installation has a single source of
 # truth:
@@ -29,8 +30,8 @@ if ! command -v pi >/dev/null 2>&1; then
   [ "$i" -lt 5 ]
 fi
 
-# `lambda` is this kit's agent binary: a symlink to pi. Pi's provider and model
-# flags come from `sandbox.command`, never from a wrapper script here.
+# `lambda` is this kit's agent binary: a symlink to pi. Shared provider and model
+# defaults live in ~/.pi/agent/settings.json, not in a wrapper script here.
 pi_path="$(command -v pi)"
 ln -sfn "$pi_path" "$(dirname "$pi_path")/lambda"
 
@@ -38,6 +39,17 @@ ln -sfn "$pi_path" "$(dirname "$pi_path")/lambda"
 # names because Lambda runs as its own `lambda` binary.
 command -v codex >/dev/null 2>&1 || npm install -g @openai/codex
 command -v claude >/dev/null 2>&1 || npm install -g @anthropic-ai/claude-code
+
+# npm dependencies of the claude-agent Pi extension. Pi loads local extensions
+# in place but never installs their dependencies. --omit=optional skips the
+# SDK's bundled ~300 MB `claude`; the extension runs the CLI installed above.
+# The lockfile stamp makes this a no-op when the image already holds this
+# exact install. Image builds see only the manifests (see Dockerfile).
+ext="$HOME/.pi/agent/extensions/claude-agent"
+if [ -f "$ext/package-lock.json" ] && ! cmp -s "$ext/package-lock.json" "$ext/node_modules/.lambda-lock"; then
+  npm ci --omit=optional --no-audit --no-fund --prefix "$ext"
+  cp "$ext/package-lock.json" "$ext/node_modules/.lambda-lock"
+fi
 
 # Webi is this project's default for standalone CLI tools. It installs into
 # ~/.local/bin, which is also on PATH.

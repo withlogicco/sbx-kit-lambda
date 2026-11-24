@@ -28,7 +28,12 @@ ENV HOME=/home/agent
 # sticky, so the agent user could not remove the file afterwards without the
 # explicit ownership; --chmod pins the exec bit regardless of the source mode.
 COPY --chown=1000:1000 --chmod=0755 files/home/.lambda/install-tools.sh /tmp/install-tools.sh
-RUN sh /tmp/install-tools.sh \
+# Only the claude-agent extension's manifests, so the script bakes its npm
+# dependencies; sbx places the extension's code from files/home at creation.
+COPY --chown=1000:1000 files/home/.pi/agent/extensions/claude-agent/package.json files/home/.pi/agent/extensions/claude-agent/package-lock.json /tmp/claude-agent/
+RUN mkdir -p "$HOME/.pi/agent/extensions/claude-agent" \
+    && cp /tmp/claude-agent/package.json /tmp/claude-agent/package-lock.json "$HOME/.pi/agent/extensions/claude-agent/" \
+    && sh /tmp/install-tools.sh \
     && rm -f /tmp/install-tools.sh \
     && rm -rf "$HOME/.npm"
 

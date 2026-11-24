@@ -44,6 +44,7 @@ test("each provider retains budget and recommended choices, plus capability tier
   const tiers = {
     "openai-codex": ["gpt-6-luna", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra"],
     anthropic: ["claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1"],
+    "claude-agent": ["sonnet", "opus", "fable"],
     xai: ["grok-4.3", "grok-4.7"],
     "opencode-go": [
       "gpt-6-luna",

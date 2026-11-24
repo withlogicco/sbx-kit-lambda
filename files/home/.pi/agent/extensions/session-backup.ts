@@ -1,3 +1,7 @@
+/**
+ * Back up and restore session transcripts only. The session store is narrower
+ * than Pi's agent directory, which also contains credentials and settings.
+ */
 import { constants } from "node:fs";
 import { copyFile, lstat, mkdir, mkdtemp, readdir, realpath, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
