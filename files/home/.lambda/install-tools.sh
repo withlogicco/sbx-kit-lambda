@@ -1,5 +1,6 @@
 #!/bin/sh
-# Installs Lambda's agent binaries.
+# Installs Lambda's agent binaries. Use Webi for supported standalone CLIs;
+# Pi, Codex, and Claude Code use their upstream installers.
 #
 # Two consumers share this script so tool installation has a single source of
 # truth:
@@ -29,8 +30,8 @@ if ! command -v pi >/dev/null 2>&1; then
   [ "$i" -lt 5 ]
 fi
 
-# `lambda` is this kit's agent binary: a symlink to pi. Pi's provider and model
-# flags come from `sandbox.command`, never from a wrapper script here.
+# `lambda` is this kit's agent binary: a symlink to pi. Shared provider and model
+# defaults live in ~/.pi/agent/settings.json, not in a wrapper script here.
 pi_path="$(command -v pi)"
 ln -sfn "$pi_path" "$(dirname "$pi_path")/lambda"
 

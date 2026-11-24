@@ -42,25 +42,28 @@ sandbox:
 agentInstructions:
   filename: AGENTS.md
   content: |
-    ## AGENTS.md scope and ownership
+    ## Repository guidance
 
-    - Keep `AGENTS.md` for rules and knowledge that affect the way you write code and structure the repository.
-    - Include important documentation and rules in function documentation.
-    - Decisions that need explanation or context should be recorded as inline comments.
-    - That said, do not overdocument and avoid documenting obvious or trivial things. The goal is to make the code and its structure self-explanatory, not to create a separate knowledge base.
+    - Maintain one top-level `AGENTS.md` per repository, focused on code organization, navigation, coding conventions, and validation commands.
+    - When corrected on coding or testing practices, update the relevant guidance in `AGENTS.md` in the same change set to capture the reusable lesson. Update code and its documentation when the correction concerns implementation behavior.
 
-    ## Maintaining session learnings
+    ## Code documentation
 
-    - Every time the user corrects an important behavior or implementation decision, record that learning in `AGENTS.md` file in the same change set, or the respective file as code comments.
-    - Treat repeated corrections and workflow mistakes as high-priority learnings to persist.
-    - Keep learnings concise, actionable, and scoped to the right level (global, app-local, or `src`).
-    - Do not include learnings for things that make sense only in that session context.
+    - Document non-obvious knowledge at the narrowest scope it governs:
+      - File-level comments: constraints or context governing the whole file.
+      - Function/method docstrings: purpose, behavior, contracts, business rules, and non-obvious logic within that function.
+      - Inline comments: targeted explanations of a particular expression, block, or decision.
+    - Keep documentation concise and useful; explain what names, types, and straightforward code do not already convey.
+
+    ## Testing
+
+    - Write targeted, human-readable tests for meaningful behavior and relevant regressions. Keep setup and assertions straightforward.
+    - Use `.github/workflows/` to find the repository's test, typecheck, and lint commands.
 
     ## Testing with Docker Compose
 
     - When a Docker Compose configuration is present, boot its dependent services with the local Docker daemon (for example, `docker compose up -d postgres redis`) and ensure their published ports are available on `localhost`.
     - Run the web app's tests from the workspace, not from a Compose container. The web app's test command must supply the environment variables it needs to connect to those services through `localhost`.
-    - Use the .github/workflows files to understand what tests and linting need to be run and how.
 
     ## Communication
 
@@ -68,10 +71,8 @@ agentInstructions:
 
     ## Planning
 
-    - Plan only when asked; save only when asked.
-    - Save as `agents/plans/YYYY-MM-DD-{slug}.md`.
-    - Keep plans laconic: scope, steps, checks, decisions.
-    - Keep useful plans; delete trivial ones.
+    - Plan only when asked. Keep plans concise: scope, steps, checks, and decisions.
+    - When asked to preserve a plan in a PR, include it in a `<details>` section of the PR description.
 
     ## Native subagents
 

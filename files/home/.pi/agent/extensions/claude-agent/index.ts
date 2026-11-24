@@ -8,7 +8,8 @@
  *
  * The provider is registered as `claude-agent` (SDK branding forbids "Claude
  * Code" as a product name). Pi's `anthropic/*` models keep the platform API
- * key; this provider never touches it.
+ * key; this provider never touches it. The child CLI uses the existing
+ * host-managed CLAUDE_CODE_OAUTH_TOKEN, without another secret or binding.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ThinkingLevel } from "@earendil-works/pi-ai";

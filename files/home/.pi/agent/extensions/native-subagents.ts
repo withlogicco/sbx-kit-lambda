@@ -1,3 +1,8 @@
+/**
+ * Native CLI subagents run inside the outer SBX security boundary, so their
+ * invocations bypass native permission prompts. The caller owns authorization
+ * from the user's request; execution does not apply a second delegation gate.
+ */
 import { spawn } from "node:child_process";
 import { mkdir, appendFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -233,6 +238,7 @@ async function runNativeAgent(
   };
 }
 
+/** Serialize mutating code runs in the shared workspace; read-only roles may overlap. */
 async function withCodeLock<T>(role: Role, action: () => Promise<T>): Promise<T> {
   if (role !== "code") return action();
   const previous = codeRun;
