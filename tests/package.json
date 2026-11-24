@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test ./*.test.mjs",
+    "pretypecheck": "test -d ../files/home/.pi/agent/extensions/claude-agent/node_modules || npm ci --omit=optional --no-audit --no-fund --prefix ../files/home/.pi/agent/extensions/claude-agent",
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {

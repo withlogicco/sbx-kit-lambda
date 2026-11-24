@@ -39,6 +39,17 @@ ln -sfn "$pi_path" "$(dirname "$pi_path")/lambda"
 command -v codex >/dev/null 2>&1 || npm install -g @openai/codex
 command -v claude >/dev/null 2>&1 || npm install -g @anthropic-ai/claude-code
 
+# npm dependencies of the claude-agent Pi extension. Pi loads local extensions
+# in place but never installs their dependencies. --omit=optional skips the
+# SDK's bundled ~300 MB `claude`; the extension runs the CLI installed above.
+# The lockfile stamp makes this a no-op when the image already holds this
+# exact install. Image builds see only the manifests (see Dockerfile).
+ext="$HOME/.pi/agent/extensions/claude-agent"
+if [ -f "$ext/package-lock.json" ] && ! cmp -s "$ext/package-lock.json" "$ext/node_modules/.lambda-lock"; then
+  npm ci --omit=optional --no-audit --no-fund --prefix "$ext"
+  cp "$ext/package-lock.json" "$ext/node_modules/.lambda-lock"
+fi
+
 # Webi is this project's default for standalone CLI tools. It installs into
 # ~/.local/bin, which is also on PATH.
 if [ ! -x "$HOME/.local/bin/gh" ]; then

@@ -27,8 +27,9 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
   models per provider: fast/cheap and recommended, plus a top-capability tier
   where useful (e.g. Codex and Claude). Preserve older models with distinct
   speed/cost value, such as Grok 4.3; newest alone is not the selection rule.
-- Claude tiers are Sonnet (cheap/fast), Opus (default), and Fable (extreme).
-  Do not include Haiku in the curated model scope.
+- Claude tiers are Sonnet (cheap/fast), Opus (default), and Fable (extreme),
+  for both `anthropic/*` and `claude-agent/*`. Do not include Haiku in the
+  curated model scope.
 - OpenCode Go keeps cheap/default pairs per selected lab (Kimi, GLM, DeepSeek,
   Qwen) and GPT-6 Luna as a Codex fallback. Add Grok 4.3 there only if Go's
   catalog lists it; keep the direct xAI choice independently.
@@ -83,34 +84,80 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
 - API-key injection does work, so host-managed auth is rebuilt on top of it.
   The host mints and refreshes tokens; the proxy substitutes them per request.
   Never store a real token in the sandbox or in kit files.
-- `chatgpt-codex` must not be renamed to `openai`, and `claude-code` must not be
-  renamed to `anthropic`. `sbx secret set --command` cannot combine with
-  `--oauth`, so reusing a built-in service id would replace that agent's OAuth
-  registration and break plain `sbx run codex` / `sbx run claude`.
-- `apiKey.inject` overwrites whatever the named header contains, so a consumer
-  only has to emit that header. Rules on the same domain can serve different
-  credentials when they target different headers. Pi's Codex header comes
-  from `sbx-codex.ts`; its Anthropic header comes from built-in API-key auth
-  configured in `models.json`. Native Codex uses the `sandboxd` model provider
-  in `~/.codex/config.toml`. Keep these header-emitting configurations intact.
+- Set explicit `--refresh on-demand` for every command-backed secret, including
+  API keys. Do not rely on the differing sbx defaults (`set`: `55m`;
+  `set-custom`: `on-demand`). Re-resolving a secret does not itself renew the
+  upstream credential.
+- Subscriptions are optional. Every Pi-backed credential is minted on the host
+  by `pi auth print-bearer-token` or `pi auth print-api-key` and injected by
+  the proxy. Never store a real token in the sandbox, and never require a
+  subscription for the kit to start.
+- Keep `chatgpt-codex` separate from `openai`, and `lambda-xai` separate from
+  `xai`. `sbx secret set --command` cannot combine with `--oauth`; do not
+  overwrite built-in OAuth registrations to supply Lambda tokens. sbx v0.48.0
+  permits only one kit credential per host.
+- `apiKey.inject` overwrites the named header on every request to that host.
+  Do not use it for two consumers that need different secrets on one host.
+  Pi's Codex header comes from `sbx-codex.ts`. Native Codex uses the
+  `sandboxd` model provider in `~/.codex/config.toml`. Keep those intact.
 - Never seed `apiKeyHelper` into `~/.claude/settings.json`. It only works with
   provenance-backed OAuth interception; here it would make Claude Code send a
   dead sentinel and never prompt. `SBX_CRED_ANTHROPIC_MODE` is not a usable
   gate either — it reports `apikey` for an OAuth-only declaration.
-- Pi's `anthropic/*` models use built-in API-key auth with `anthropic.apiKey`
-  set to `$LAMBDA_ANTHROPIC_API_KEY` in `models.json`, and the `anthropic`
-  credential injected into `x-api-key` by the proxy. Do not add a custom
-  Anthropic auth extension: API-key auth only needs configuration.
-- Keep `claude-code` exclusively for native Claude Code (including Pi's Claude
-  subagent), using `CLAUDE_CODE_OAUTH_TOKEN` and `Authorization` injection.
-  Never make Pi consume that subscription credential or replace it with the
-  platform key. Use `LAMBDA_ANTHROPIC_API_KEY` for the platform declaration,
-  not `ANTHROPIC_API_KEY`, which native Claude also reads. Verified with Claude
-  Code 2.1.289 `auth status`: when both that variable and the subscription token
-  are set, it selects `api_key`. Prefer the isolated variable over adding
-  environment filtering to Claude subagents.
+- Do not declare a kit credential for `api.anthropic.com`. Both consumers use
+  distinct custom secrets so only each client's placeholder is replaced.
+  sbx v0.48.0 also auto-injects a stored built-in `anthropic` API key even when
+  absent from the kit. Preserve globals during diagnosis. Fresh v0.49.2
+  sandboxes passed custom-key auth and unauthenticated 401 checks without the
+  legacy empty-source override; do not reapply it blindly. Old sandboxes may
+  retain stale injection rules: back up sessions before recreation. Local CLI
+  auth status alone cannot prove proxy isolation.
+- Pi's `anthropic/*` models use the platform API key from host Pi. `models.json`
+  sets `anthropic.apiKey` to `$LAMBDA_ANTHROPIC_API_KEY`. The placeholder must
+  not contain `sk-ant-oat`. Do not add a custom Anthropic auth extension.
+- Native Claude Code, including `/claude`, reads `CLAUDE_CODE_OAUTH_TOKEN` and
+  emits `Authorization`. That placeholder must contain `sk-ant-oat`, and the
+  secret is a host `claude setup-token` subscription token, not `pi auth` and not
+  the platform key. Do not set `ANTHROPIC_API_KEY`: Claude Code 2.1.289 selects
+  an API key over the subscription token when both standard variables are present.
+  Do not add `service: claude-code`; it would take the host back.
+- Store the long-lived `claude setup-token` result in the dedicated host
+  Keychain item `Lambda Claude Code-token`, not in sandbox files or the kit.
+  Read it with a custom command secret and explicit `--refresh on-demand`.
+  Keep an existing placeholder when changing its source, and migrate scoped
+  overrides separately. Replace expired/revoked tokens manually with
+  `claude setup-token` and update that item. Do not use the short-lived bearer
+  in `Claude Code-credentials`, automatic model invocations, or direct OAuth
+  refresh helpers. Host login/status does not replace the dedicated item.
+  Prompt for the token with `security add-generic-password ... -w` (`-w` last);
+  never pass it in arguments, shell history, or chat.
+- Pi's `xai/*` models use `LAMBDA_XAI_TOKEN`, not `XAI_API_KEY`, so a platform
+  key cannot replace the host-minted subscription bearer.
 - Every credential a third-party v2 kit declares needs a user-approved binding.
   Adding a credential or a new inject domain means a new first-run prompt.
+
+## Claude Agent provider
+
+- `claude-agent/*` runs Claude on the subscription by driving the installed
+  `claude` binary with the Claude Agent SDK. Auth is native Claude's
+  `CLAUDE_CODE_OAUTH_TOKEN`; never add a secret, binding, or domain for it.
+  Keep it a separate provider from `anthropic/*` (platform key). SDK branding
+  rules forbid naming it "Claude Code".
+- Claude Code's preset is the system prompt. Pi contributes only user
+  instructions; never forward Pi's harness prompt, tool list, or docs. Claude's
+  built-in tools, skills, and setting sources stay disabled; Pi's tools are the
+  in-process `mcp__pi__*` server.
+- Pi's history is the source of truth. On divergence, errors, or aborts, start
+  a fresh process with a checkpoint; do not fork Claude sessions. Requests with
+  `cacheRetention: "none"` or no session id (compaction, branch summaries) run
+  in a throwaway process.
+- Start no process in the extension factory; stop processes on
+  `session_shutdown`. Do not set `promptCache`: Pi's cache warmer would spawn
+  `claude`.
+- Its npm dependencies install via `install-tools.sh` with
+  `npm ci --omit=optional`, using `pathToClaudeCodeExecutable` instead of the
+  SDK's bundled binary. Never commit `node_modules`; the SDK is not
+  redistributable.
 
 ## Session backups
 
@@ -145,7 +192,8 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
   Start on the first `agent_start` of a run (it repeats on retries) and end on
   `agent_settled`. The rate-limit resume starts a run without
   `before_agent_start`, so never require a prompt to write the start entry.
-- Run `cd tests && npm ci && npm test && npm run typecheck` after changing it.
+- Run `cd tests && npm ci && npm test && npm run typecheck` after changing it
+  or the `claude-agent` extension.
 
 ## Sandbox state
 
@@ -169,5 +217,6 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
   (Claude Sonnet 5, high). Override a role with
   `LAMBDA_<BACKEND>_<ROLE>_MODEL` and `LAMBDA_<BACKEND>_<ROLE>_EFFORT`, or the
   binary with `LAMBDA_<BACKEND>_EXECUTABLE`.
-- If Claude authentication is unavailable, tell the user to run `!claude` and
-  complete `/login` inside the sandbox.
+- If Claude authentication is unavailable, ask the user to replace the host
+  setup token in Keychain (see Authentication), then retry. Do not recommend
+  sandbox-local `/login` for this host-managed setup.

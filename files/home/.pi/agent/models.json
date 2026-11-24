@@ -9,6 +9,9 @@
     },
     "anthropic": {
       "apiKey": "$LAMBDA_ANTHROPIC_API_KEY"
+    },
+    "xai": {
+      "apiKey": "$LAMBDA_XAI_TOKEN"
     }
   }
 }

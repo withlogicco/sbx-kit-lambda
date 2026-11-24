@@ -108,6 +108,9 @@ permissions:
       - console.anthropic.com
       - downloads.claude.ai
       - claude.com
+      # xAI subscription API. The token is minted on the host, so auth.x.ai
+      # is not needed inside the sandbox.
+      - api.x.ai
       - registry.terraform.io
       - docs.cloud.google.com
       # VS Code server download and extension gallery (Remote-SSH installs)
@@ -129,13 +132,13 @@ environment:
     # open /dev/tty for a username, which would freeze the TUI.
     GIT_TERMINAL_PROMPT: "0"
 
+# Anthropic platform and Claude subscription credentials are separate custom
+# secrets, not kit services: both clients share api.anthropic.com. Host setup
+# and built-in Anthropic injection safeguards are documented in README.md.
 credentials:
-  #   sbx secret set chatgpt-codex \
-  #     --command 'pi auth print-bearer-token --provider openai-codex' \
-  #     --refresh on-demand
   - service: chatgpt-codex
     description: "ChatGPT subscription access token, minted on the host by Pi"
-    required: true
+    required: false
     apiKey:
       name: LAMBDA_CHATGPT_TOKEN
       proxyManaged: true
@@ -143,36 +146,20 @@ credentials:
         - domain: chatgpt.com
           header: Authorization
           format: "Bearer %s"
-  #   sbx secret set anthropic --command 'pi auth print-api-key --provider anthropic'
-  # Pi emits x-api-key; Claude Code emits Authorization on the same domain.
-  # Keep the platform key out of ANTHROPIC_API_KEY so native Claude continues
-  # using its subscription token instead of picking up Pi's API-key sentinel.
-  - service: anthropic
-    description: "Anthropic platform API key used by Pi"
+  # Not service `xai`: that built-in id is an API-key registration.
+  - service: lambda-xai
+    description: "xAI subscription access token, minted on the host by Pi"
     required: false
     apiKey:
-      name: LAMBDA_ANTHROPIC_API_KEY
+      name: LAMBDA_XAI_TOKEN
       proxyManaged: true
       inject:
-        - domain: api.anthropic.com
-          header: x-api-key
-          format: "%s"
-  #   sbx secret set claude-code \
-  #     --command 'pi auth print-bearer-token --provider anthropic' \
-  #     --refresh on-demand
-  - service: claude-code
-    description: "Claude subscription access token for native Claude Code, minted on the host by Pi"
-    required: false
-    apiKey:
-      name: CLAUDE_CODE_OAUTH_TOKEN
-      proxyManaged: true
-      inject:
-        - domain: api.anthropic.com
+        - domain: api.x.ai
           header: Authorization
           format: "Bearer %s"
   - service: opencode-go
-    description: "OpenCode Go API key used by Pi"
-    required: true
+    description: "OpenCode Go API key used by Pi, printed by host Pi"
+    required: false
     apiKey:
       name: OPENCODE_API_KEY
       proxyManaged: true
@@ -207,7 +194,7 @@ setup:
     # tools.
     - command: "sh /home/agent/.lambda/install-tools.sh"
       user: "1000"
-      description: "Install Pi, the lambda binary, and the native Codex, Claude Code, and gh CLIs"
+      description: "Install Pi, the lambda binary, the native Codex, Claude Code, and gh CLIs, and claude-agent extension dependencies"
     # Point the native Codex CLI at the ChatGPT backend through a custom model
     # provider, mirroring what the built-in codex kit does in `oauth` mode. The
     # bearer token here is only a placeholder that makes Codex emit an
@@ -257,11 +244,11 @@ setup:
     # No apiKeyHelper here, deliberately. The built-in claude kit seeds
     # `apiKeyHelper: "echo proxy-managed"` so Claude Code presents the proxy
     # sentinel, but proxy-managed OAuth does not activate for a third-party
-    # sandbox kit (verified: the proxy never substitutes the sentinel). Writing
-    # the helper would make Claude Code send a dead sentinel and never prompt,
-    # which breaks the in-sandbox `/login` that is the only working path here.
-    # SBX_CRED_ANTHROPIC_MODE is not a usable gate either: it reports `apikey`
-    # even for a credential this kit declares as OAuth-only.
+    # sandbox kit (verified: the proxy never substitutes the sentinel). Claude
+    # instead reads CLAUDE_CODE_OAUTH_TOKEN, a custom-secret placeholder replaced
+    # by the proxy with the host's long-lived `claude setup-token` value from
+    # Keychain. Do not seed a local
+    # login or an API-key helper that overrides that authentication path.
     - command: |
         set -e
         mkdir -p /home/agent/.claude
