@@ -1,3 +1,8 @@
 .worktrees/
 node_modules/
 .lambda/backup/
+
+# Keep the kit's installer trackable despite the broad runtime-state exclusion.
+!files/home/.lambda/
+files/home/.lambda/*
+!files/home/.lambda/install-tools.sh

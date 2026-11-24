@@ -136,6 +136,9 @@ own agent, `codex` and `claude` remain the real upstream CLIs.
   create storage or rename the user's Pi session.
 - Only the turn-end hook writes `warning`; `report_status` must reject it.
 - Leave `in_progress` unchanged on process exit; the dashboard owns stale detection.
+- Exclude runtime state with the broad `.lambda/` pattern in `info/exclude`.
+  Keep kit assets under `files/home/.lambda/` visible with a narrow override in
+  the repository `.gitignore`; do not migrate or rewrite existing exclude rules.
 - Linked launches with `--separate-git-dir` are out of scope. Concurrent duplicate
   `.lambda/` exclusions are harmless; do not add cross-process locking.
 - A "turn" is a Pi agent run, not Pi's per-request `turn_start`/`turn_end`.

@@ -215,7 +215,7 @@ export async function excludePath(cwd: string): Promise<string> {
   return resolve(cwd, await git(cwd, ["rev-parse", "--git-path", "info/exclude"]));
 }
 
-/** Add `.lambda/` unless present; concurrent duplicate exclusions are harmless. */
+/** Append the broad runtime-state exclusion without rewriting existing rules. */
 export async function ensureExcluded(path: string): Promise<boolean> {
   let content = "";
   try {

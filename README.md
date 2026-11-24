@@ -217,10 +217,12 @@ omitted. Existing sandboxes are not updated by editing the kit: edit their
 Lambda reports its working state for a local dashboard. Each Pi session appends
 JSON lines to `<main checkout>/.lambda/sessions/<session-id>.jsonl`, even when
 launched in a linked worktree. The last valid line is the current state.
-`.lambda/` is added to the repository's `info/exclude`, so it stays out of
-`git status` and `.gitignore` is untouched. Concurrent sessions may add harmless
-duplicate exclusions. If an append was interrupted, the next write adds a line
-boundary without rewriting history.
+The broad `.lambda/` rule is added to the repository's `info/exclude`, keeping
+runtime state ignored at any depth. Existing exclusion rules are left untouched.
+This kit's `.gitignore` narrowly re-includes `files/home/.lambda/install-tools.sh`
+so the installer remains trackable. Concurrent sessions may add harmless duplicate
+exclusions. If an append was interrupted, the next write adds a line boundary
+without rewriting history.
 
 - Every turn starts with an `in_progress` entry: the prompt on a session's first
   turn, `Resumed, working` afterwards (including rate-limit resumes).
