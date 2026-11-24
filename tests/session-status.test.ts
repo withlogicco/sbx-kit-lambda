@@ -4,7 +4,7 @@ process.env.TZ = "Europe/Athens";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { appendFile, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -25,7 +25,7 @@ import configureSessionStatus, {
 const scratch: string[] = [];
 
 async function tempDir(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "session-status-"));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "session-status-")));
   scratch.push(dir);
   return dir;
 }
@@ -188,6 +188,30 @@ describe("info/exclude", () => {
     await writeFile(path, content);
     assert.equal(await ensureExcluded(path), false);
     assert.equal(await readFile(path, "utf8"), content);
+  });
+
+  it("adds the broad rule without rewriting an existing anchored rule", async () => {
+    const path = join(await tempDir(), "exclude");
+    const content = "*.log\n/.lambda/\n";
+    await writeFile(path, content);
+    assert.equal(await ensureExcluded(path), true);
+    assert.equal(await readFile(path, "utf8"), `${content}.lambda/\n`);
+  });
+});
+
+describe("runtime-state exclusion", () => {
+  it("keeps the broad local exclusion and lets the repository whitelist its installer", async () => {
+    const cwd = await repo();
+    await writeFile(join(cwd, ".gitignore"),
+      "!files/home/.lambda/\nfiles/home/.lambda/*\n!files/home/.lambda/install-tools.sh\n");
+    const path = join(cwd, ".git", "info", "exclude");
+    await writeFile(path, ".lambda/\n");
+    assert.equal(await ensureExcluded(path), false);
+    assert.equal(
+      git(cwd, "check-ignore", "--no-index", ".lambda/sessions/test.jsonl", "packages/app/.lambda/backup/sessions/test.jsonl"),
+      ".lambda/sessions/test.jsonl\npackages/app/.lambda/backup/sessions/test.jsonl",
+    );
+    assert.throws(() => git(cwd, "check-ignore", "--no-index", "files/home/.lambda/install-tools.sh"));
   });
 });
 
